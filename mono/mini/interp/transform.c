@@ -2950,6 +2950,19 @@ interp_transform_call (TransformData *td, MonoMethod *method, MonoMethod *target
 			// therefore some args are in the param area, while the fp is not. We should differentiate for
 			// this, probably once we will have an explicit param area where we copy arguments.
 			if (op != -1) {
+#if defined(HOST_WIN32) && defined(TARGET_X86)
+				/* Default P/Invoke signatures use Winapi, unlike internal C calls. */
+				if (csignature->pinvoke && csignature->call_convention == MONO_CALL_DEFAULT &&
+				    method->wrapper_type == MONO_WRAPPER_MANAGED_TO_NATIVE) {
+					WrapperInfo *info = mono_marshal_get_wrapper_info (method);
+					if (info && info->subtype != WRAPPER_SUBTYPE_NATIVE_FUNC &&
+					    info->d.managed_to_native.method &&
+					    (info->d.managed_to_native.method->flags & METHOD_ATTRIBUTE_PINVOKE_IMPL)) {
+						csignature = mono_metadata_signature_dup_mempool (td->mempool, csignature);
+						csignature->call_convention = MONO_CALL_STDCALL;
+					}
+				}
+#endif
 				interp_add_ins (td, MINT_CALLI_NAT_FAST);
 				interp_ins_set_dreg (td->last_ins, dreg);
 				td->last_ins->data [0] = get_data_item_index (td, (void *)csignature);
@@ -8490,4 +8503,3 @@ mono_interp_transform_method (InterpMethod *imethod, ThreadContext *context, Mon
 	// FIXME: Add a different callback ?
 	MONO_PROFILER_RAISE (jit_done, (method, imethod->jinfo));
 }
-
