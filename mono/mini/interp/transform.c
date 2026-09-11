@@ -2958,7 +2958,8 @@ interp_transform_call (TransformData *td, MonoMethod *method, MonoMethod *target
 					if (info && info->subtype != WRAPPER_SUBTYPE_NATIVE_FUNC &&
 					    info->d.managed_to_native.method &&
 					    (info->d.managed_to_native.method->flags & METHOD_ATTRIBUTE_PINVOKE_IMPL)) {
-						csignature = mono_metadata_signature_dup_mempool (td->mempool, csignature);
+						/* The signature remains in data_items after the transform pool is freed. */
+						csignature = mono_metadata_signature_dup_full (m_class_get_image (method->klass), csignature);
 						csignature->call_convention = MONO_CALL_STDCALL;
 					}
 				}
