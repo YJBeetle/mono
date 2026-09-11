@@ -1481,6 +1481,29 @@ public unsafe class Tests {
 		return 0;
 	}
 
+	[DllImport ("libtest", EntryPoint = "mono_test_stdcall_pointer", CallingConvention = CallingConvention.StdCall)]
+	static extern IntPtr stdcall_pointer (IntPtr value);
+
+	[DllImport ("libtest", EntryPoint = "mono_test_stdcall_pointer")]
+	static extern IntPtr winapi_pointer (IntPtr value);
+
+	[DllImport ("libtest", EntryPoint = "mono_test_cdecl_pointer", CallingConvention = CallingConvention.Cdecl)]
+	static extern IntPtr cdecl_pointer (IntPtr value);
+
+	public static int test_0_native_pointer_call_conventions () {
+		// Pointer signatures exercise the interpreter's fast native call path.
+		for (int i = 0; i < 256; ++i) {
+			IntPtr value = new IntPtr (i + 1);
+			if (cdecl_pointer (value) != value)
+				return 1;
+			if (stdcall_pointer (value) != value)
+				return 2;
+			if (winapi_pointer (value) != value)
+				return 3;
+		}
+		return 0;
+	}
+
 	/* Float test */
 
 	[DllImport ("libtest", EntryPoint="mono_test_marshal_pass_return_float")]
