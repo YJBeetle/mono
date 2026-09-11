@@ -89,6 +89,19 @@ namespace MonoTests.Microsoft_VisualBasic.FileIO
 
 
 			delimiters = new string [] { ";" };
+			text = "a;bb;ccc;dddd" + Constants.vbNewLine + "111;\"22;3\"";
+			using (StringReader reader = new StringReader (text))
+			using (TextFieldParser t = new TextFieldParser (reader)) {
+				t.SetDelimiters (delimiters);
+				t.TextFieldType = FieldType.Delimited;
+				t.HasFieldsEnclosedInQuotes = true;
+				Assert.AreEqual ("a:bb:ccc:dddd", Strings.Join (t.ReadFields (), ":"), "#C'1");
+				Assert.AreEqual ("111:22;3", Strings.Join (t.ReadFields (), ":"), "#C'2");
+				Assert.AreEqual (null, Strings.Join (t.ReadFields (), ":"), "#C'3");
+			}
+
+
+			delimiters = new string [] { ";" };
 			text = "\"";
 			using (StringReader reader = new StringReader (text))
 			using (TextFieldParser t = new TextFieldParser (reader)) {
@@ -211,8 +224,67 @@ namespace MonoTests.Microsoft_VisualBasic.FileIO
 				t.HasFieldsEnclosedInQuotes = true;
 				Assert.AreEqual ("?b?", Strings.Join (t.ReadFields (), "?"), "#L1");
 			}
+
+
+			delimiters = new string [] { ";" };
+			text = "a;\"b" + Constants.vbNewLine + "b\";c";
+			using (StringReader reader = new StringReader (text))
+			using (TextFieldParser t = new TextFieldParser (reader)) {
+				t.SetDelimiters (delimiters);
+				t.TextFieldType = FieldType.Delimited;
+				t.HasFieldsEnclosedInQuotes = true;
+				Assert.AreEqual ("a:b" + Constants.vbNewLine + "b:c", Strings.Join (t.ReadFields (), ":"), "#M1");
+				Assert.AreEqual (null, Strings.Join (t.ReadFields (), ":"), "#M2");
+			}
+
+
+			delimiters = new string [] { ";" };
+			text = "a;\"" + Constants.vbNewLine + "b" + Constants.vbNewLine + "\";c";
+			using (StringReader reader = new StringReader (text))
+			using (TextFieldParser t = new TextFieldParser (reader)) {
+				t.SetDelimiters (delimiters);
+				t.TextFieldType = FieldType.Delimited;
+				t.HasFieldsEnclosedInQuotes = true;
+				t.TrimWhiteSpace = false;
+				Assert.AreEqual ("a:" + Constants.vbNewLine + "b" + Constants.vbNewLine + ":c", Strings.Join (t.ReadFields (), ":"), "#N1");
+				Assert.AreEqual (null, Strings.Join (t.ReadFields (), ":"), "#N2");
+			}
+
+
+			delimiters = new string [] { ";" };
+			text = "\"\"\"\"";
+			using (StringReader reader = new StringReader (text))
+			using (TextFieldParser t = new TextFieldParser (reader)) {
+				t.SetDelimiters (delimiters);
+				t.TextFieldType = FieldType.Delimited;
+				t.HasFieldsEnclosedInQuotes = true;
+				Assert.AreEqual ("\"", Strings.Join (t.ReadFields (), ":"), "#P1");
+			}
+
+
+			delimiters = new string [] { ";" };
+			text = "\"\"\"" + Constants.vbNewLine + "\"";
+			using (StringReader reader = new StringReader (text))
+			using (TextFieldParser t = new TextFieldParser (reader)) {
+				t.SetDelimiters (delimiters);
+				t.TextFieldType = FieldType.Delimited;
+				t.HasFieldsEnclosedInQuotes = true;
+				t.TrimWhiteSpace = false;
+				Assert.AreEqual ("\"" + Constants.vbNewLine, Strings.Join (t.ReadFields (), ":"), "#Q1");
+			}
+
+
+			delimiters = new string [] { ";" };
+			text = "a\"\"a";
+			using (StringReader reader = new StringReader (text))
+			using (TextFieldParser t = new TextFieldParser (reader)) {
+				t.SetDelimiters (delimiters);
+				t.TextFieldType = FieldType.Delimited;
+				t.HasFieldsEnclosedInQuotes = true;
+				Assert.AreEqual ("a\"\"a", Strings.Join (t.ReadFields (), ":"), "#R1");
+			}
 		}
-		
+
 		[Test]
 		public void FixedTest1 ()
 		{

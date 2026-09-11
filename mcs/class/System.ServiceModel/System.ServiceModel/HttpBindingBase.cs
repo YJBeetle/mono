@@ -111,7 +111,7 @@ namespace System.ServiceModel
 		}
 
 		public override string Scheme {
-			get;
+			get { return this.GetTransport().Scheme; }
 		}
 
 		public EnvelopeVersion EnvelopeVersion {
@@ -143,6 +143,61 @@ namespace System.ServiceModel
 
 		bool IBindingRuntimePreferences.ReceiveSynchronously {
 			get { return false; }
+		}
+
+		internal virtual BasicHttpSecurity BasicHttpSecurity {
+			get { throw new NotImplementedException (); }
+		}
+
+		internal TransportBindingElement GetTransport ()
+		{
+			HttpTransportBindingElement h;
+			switch (BasicHttpSecurity.Mode) {
+			case BasicHttpSecurityMode.Transport:
+			case BasicHttpSecurityMode.TransportWithMessageCredential:
+				h = new HttpsTransportBindingElement ();
+				break;
+			default:
+				h = new HttpTransportBindingElement ();
+				break;
+			}
+
+			h.AllowCookies = AllowCookies;
+			h.BypassProxyOnLocal = BypassProxyOnLocal;
+			h.HostNameComparisonMode = HostNameComparisonMode;
+			h.MaxBufferPoolSize = MaxBufferPoolSize;
+			h.MaxBufferSize = MaxBufferSize;
+			h.MaxReceivedMessageSize = MaxReceivedMessageSize;
+			h.ProxyAddress = ProxyAddress;
+			h.UseDefaultWebProxy = UseDefaultWebProxy;
+			h.TransferMode = TransferMode;
+			h.ExtendedProtectionPolicy = BasicHttpSecurity.Transport.ExtendedProtectionPolicy;
+
+			switch (BasicHttpSecurity.Transport.ClientCredentialType) {
+			case HttpClientCredentialType.Basic:
+				h.AuthenticationScheme = AuthenticationSchemes.Basic;
+				break;
+			case HttpClientCredentialType.Ntlm:
+				h.AuthenticationScheme = AuthenticationSchemes.Ntlm;
+				break;
+			case HttpClientCredentialType.Windows:
+				h.AuthenticationScheme = AuthenticationSchemes.Negotiate;
+				break;
+			case HttpClientCredentialType.Digest:
+				h.AuthenticationScheme = AuthenticationSchemes.Digest;
+				break;
+			case HttpClientCredentialType.Certificate:
+				switch (BasicHttpSecurity.Mode) {
+				case BasicHttpSecurityMode.Transport:
+					(h as HttpsTransportBindingElement).RequireClientCertificate = true;
+					break;
+				case BasicHttpSecurityMode.TransportCredentialOnly:
+					throw new InvalidOperationException ("Certificate-based client authentication is not supported by 'TransportCredentialOnly' mode.");
+				}
+				break;
+			}
+
+			return h;
 		}
 	}
 }

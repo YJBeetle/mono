@@ -28,6 +28,7 @@
 Imports System.ComponentModel
 Imports System.IO
 Imports System.Text
+Imports Microsoft.VisualBasic.Constants
 
 Namespace Microsoft.VisualBasic.FileIO
     Public Class TextFieldParser
@@ -42,6 +43,7 @@ Namespace Microsoft.VisualBasic.FileIO
         Private m_FieldWidths As Integer() = Nothing
         Private m_HasFieldsEnclosedInQuotes As Boolean = True
         Private m_LineNumber As Long = -1
+        Private m_DelimitedStartLineNumber As Long = -1
         Private m_TextFieldType As FieldType = FieldType.Delimited
         Private m_TrimWhiteSpace As Boolean = True
 
@@ -95,6 +97,7 @@ Namespace Microsoft.VisualBasic.FileIO
             Dim nextIndex As Integer
 
             line = GetNextLine()
+            m_DelimitedStartLineNumber = m_LineNumber
 
             If line Is Nothing Then Return Nothing
 
@@ -106,30 +109,41 @@ Namespace Microsoft.VisualBasic.FileIO
             Return result.ToArray()
         End Function
 
-        Private Function GetNextField(ByVal line As String, ByVal startIndex As Integer, ByRef nextIndex As Integer) As String
+        Private Function GetNextField(ByRef line As String, ByVal startIndex As Integer, ByRef nextIndex As Integer) As String
             Dim inQuote As Boolean
-            Dim currentindex As Integer
 
             If nextIndex = Integer.MinValue Then
                 nextIndex = Integer.MaxValue
                 Return String.Empty
             End If
 
-            If m_HasFieldsEnclosedInQuotes AndAlso line(currentindex) = """"c Then
+            If m_HasFieldsEnclosedInQuotes AndAlso line(startIndex) = """"c Then
                 inQuote = True
                 startIndex += 1
             End If
 
-            currentindex = startIndex
-
             Dim mustMatch As Boolean
-            For j As Integer = startIndex To line.Length - 1
+            Dim j As Integer = startIndex
+            While j < line.Length OrElse inQuote
                 If inQuote Then
-                    If line(j) = """"c Then
-                        inQuote = False
-                        mustMatch = True
+                    If j >= line.Length Then
+                        ' Reached end of line without closing quote
+                        Dim nextLine = GetNextLine()
+                        if nextLine Is Nothing then
+                            RaiseDelimiterEx(line)
+                        End If
+                        line &= Constants.vbNewLine & nextLine
+                    Else If line(j) = """"c Then
+                        if j + 1 < line.Length AndAlso line(j + 1) = """"c Then
+                            ' Escaped quote, so skip two characters
+                            j += 1
+                        Else
+                            inQuote = False
+                            mustMatch = True
+                        End If
                     End If
-                    Continue For
+                    j += 1
+                    Continue While
                 End If
 
                 For i As Integer = 0 To m_Delimiters.Length - 1
@@ -139,7 +153,7 @@ Namespace Microsoft.VisualBasic.FileIO
                             nextIndex = Integer.MinValue
                         End If
                         If mustMatch Then
-                            Return line.Substring(startIndex, j - startIndex - 1)
+                            Return line.Substring(startIndex, j - startIndex - 1).Replace("""""", """")
                         Else
                             Return line.Substring(startIndex, j - startIndex)
                         End If
@@ -149,7 +163,8 @@ Namespace Microsoft.VisualBasic.FileIO
                 If mustMatch Then
                     RaiseDelimiterEx(line)
                 End If
-            Next
+                j += 1
+            End While
 
             If inQuote Then
                 RaiseDelimiterEx(line)
@@ -157,14 +172,14 @@ Namespace Microsoft.VisualBasic.FileIO
 
             nextIndex = line.Length
             If mustMatch Then
-                Return line.Substring(startIndex, nextIndex - startIndex - 1)
+                Return line.Substring(startIndex, nextIndex - startIndex - 1).Replace("""""", """")
             Else
                 Return line.Substring(startIndex)
             End If
         End Function
 
         Private Sub RaiseDelimiterEx(ByVal Line As String)
-            m_ErrorLineNumber = m_LineNumber
+            m_ErrorLineNumber = m_DelimitedStartLineNumber
             m_ErrorLine = Line
             Throw New MalformedLineException("Line " & m_ErrorLineNumber.ToString & " cannot be parsed using the current Delimiters.", m_ErrorLineNumber)
         End Sub

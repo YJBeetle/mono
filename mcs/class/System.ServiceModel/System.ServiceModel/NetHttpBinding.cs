@@ -29,16 +29,28 @@ using System.ServiceModel.Channels;
 namespace System.ServiceModel {
 	[MonoTODO]
 	public class NetHttpBinding : HttpBindingBase {
+		BinaryMessageEncodingBindingElement binary_message_encoding_binding_element;
+		ReliableSessionBindingElement session;
+		OptionalReliableSession reliable_session;
+		NetHttpMessageEncoding message_encoding;
+		BasicHttpSecurity basic_http_security;
+
 		public NetHttpBinding ()
+			: this(BasicHttpSecurityMode.None)
 		{
-			throw new NotImplementedException ();
 		}
-		
+
 		public NetHttpBinding (BasicHttpSecurityMode securityMode)
+			: base()
 		{
-			throw new NotImplementedException ();
+			this.message_encoding = NetHttpMessageEncoding.Binary;
+			this.binary_message_encoding_binding_element = new BinaryMessageEncodingBindingElement() { MessageVersion = MessageVersion.Soap12WSAddressing10 };
+			this.session = new ReliableSessionBindingElement();
+			this.reliable_session = new OptionalReliableSession(this.session);
+			this.basic_http_security = new BasicHttpSecurity();
+			this.basic_http_security.Mode = securityMode;
 		}
-		
+
 		public NetHttpBinding (string configurationName)
 		{
 			throw new NotImplementedException ();
@@ -49,24 +61,64 @@ namespace System.ServiceModel {
 		{
 			throw new NotImplementedException ();
 		}
-		
-		public NetHttpMessageEncoding MessageEncoding { get; set; }
+
+		public NetHttpMessageEncoding MessageEncoding {
+			get { return this.message_encoding; }
+			set { throw new NotImplementedException (); }
+		}
+
 		public OptionalReliableSession ReliableSession { get; set; }
-		public BasicHttpSecurity Security { get; set; }
+
+		public BasicHttpSecurity Security {
+			get { return this.basic_http_security; }
+			set { throw new NotImplementedException (); }
+		}
 
 		public WebSocketTransportSettings WebSocketSettings {
 			get { throw new NotImplementedException (); }
 		}
-		
-		public override string Scheme {
-			get { throw new NotImplementedException (); }
+
+		internal override BasicHttpSecurity BasicHttpSecurity {
+			get { return this.basic_http_security; }
 		}
-		
+
 		public override BindingElementCollection CreateBindingElements ()
 		{
-			throw new NotImplementedException ();
+			// return collection of BindingElements
+			BindingElementCollection bindingElements = new BindingElementCollection();
+
+			// order of BindingElements is important
+			// add session
+			if (this.reliable_session.Enabled)
+			{
+				bindingElements.Add(this.session);
+			}
+
+			// add security (*optional)
+			SecurityBindingElement messageSecurity = this.BasicHttpSecurity.CreateMessageSecurity();
+			if (messageSecurity != null)
+			{
+				bindingElements.Add(messageSecurity);
+			}
+
+			// add encoding
+			switch (this.MessageEncoding)
+			{
+				case NetHttpMessageEncoding.Text:
+				case NetHttpMessageEncoding.Mtom:
+					throw new NotImplementedException ();
+					break;
+				default:
+					bindingElements.Add(this.binary_message_encoding_binding_element);
+					break;
+			}
+
+			// add transport (http or https)
+			bindingElements.Add(this.GetTransport());
+
+			return bindingElements.Clone();
 		}
-		
+
 		public bool ShouldSerializeReliableSession ()
 		{
 			throw new NotImplementedException ();
