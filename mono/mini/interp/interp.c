@@ -2124,9 +2124,8 @@ do_icall (MonoMethodSignature *sig, int op, stackval *sp, gpointer ptr, gboolean
 {
 
 #if defined(HOST_WIN32) && defined(TARGET_X86)
-	/* Winapi defaults to stdcall on 32-bit Windows. */
-	if (sig && sig->pinvoke &&
-	    (sig->call_convention == MONO_CALL_DEFAULT || sig->call_convention == MONO_CALL_STDCALL)) {
+	/* Default signatures also describe internal C calls. */
+	if (sig && sig->pinvoke && sig->call_convention == MONO_CALL_STDCALL) {
 		do_icall_stdcall (op, sp, ptr);
 		goto done;
 	}
