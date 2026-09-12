@@ -323,6 +323,7 @@ namespace System.Runtime.InteropServices
 								serverKey.DeleteValue ("ThreadingModel", false);
 							}
 						}
+					}
 						DeleteSubKeyIfEmpty (classIdKey, "InprocServer32");
 
 					if (allVersionsRemoved) {
