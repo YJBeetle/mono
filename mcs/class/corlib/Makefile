@@ -202,6 +202,7 @@ endif
 
 EXTRA_DISTFILES = \
 	Test/resources/culture-*.cs		\
+	Test/System.Runtime.InteropServices/RegistrationServicesTestAssembly.cs \
 	$(RESOURCE_FILES) \
 	$(TEST_RESOURCE_FILES) \
 	$(TEST_RESOURCES:.resources=.resx) \
@@ -239,6 +240,15 @@ TEST_RESOURCES = $(TEST_RESX_RESOURCES) $(TEST_RESX_RESOURCES_SATELITE)
 
 satellite_assembly1 = $(test_lib_dir)/es-ES/$(patsubst %.dll,%.resources.dll,$(test_lib))
 satellite_assembly2 = $(test_lib_dir)/nn-NO/$(patsubst %.dll,%.resources.dll,$(test_lib))
+
+registration_services_test_assembly = $(test_lib_dir)/RegistrationServicesTestAssembly.dll
+
+ifndef MOBILE_PROFILE
+$(registration_services_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesTestAssembly.cs | $(test_lib_dir)
+	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -out:$@ $<
+
+$(test_lib_output): $(registration_services_test_assembly)
+endif
 
 $(test_lib_output): $(TEST_RESOURCES) $(satellite_assembly1) $(satellite_assembly2) | $(test_lib_dir)
 
