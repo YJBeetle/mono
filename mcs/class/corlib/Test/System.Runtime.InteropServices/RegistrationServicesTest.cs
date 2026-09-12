@@ -28,6 +28,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -42,6 +43,11 @@ namespace MonoTests.System.Runtime.InteropServices {
 		const string DerivedClassId = "{641D963E-EA94-4E4F-B6EF-1DFEB43FB697}";
 		const string DerivedProgId = "MonoTests.RegistrationServices.DerivedTestObject";
 		const string CallbackPath = "MonoTests.RegistrationServices.CallbackState";
+		const string ManagedCategoryPath = "Component Categories\\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}";
+		const string ThirdPartyValue = "MonoRegistrationServicesTest";
+		const string DynamicClassId = "{5C9782F8-3BAA-42C7-A461-B8C94F2FA438}";
+		const string DynamicProgId = "MonoTests.RegistrationServices.VersionedObject";
+		const string InvalidCallbackClassId = "{F81E4AE1-917F-43C8-BD29-A56B182287AA}";
 
 		[ComVisible (true)]
 		public class VisibleClass {
@@ -82,6 +88,20 @@ namespace MonoTests.System.Runtime.InteropServices {
 			}
 		}
 
+		[ComImport]
+		[ComVisible (false)]
+		[Guid ("7392E7B9-5C04-4B9C-A1D0-85CF83B289BB")]
+		[InterfaceType (ComInterfaceType.InterfaceIsIUnknown)]
+		public interface ImportedInterface {
+		}
+
+		[ComImport]
+		[ComVisible (false)]
+		[Guid ("90E4CF83-5AE0-48C6-A3D0-8B61F3969D27")]
+		[InterfaceType (ComInterfaceType.InterfaceIsIUnknown)]
+		public interface GenericImportedInterface<T> {
+		}
+
 		[SetUp]
 		public void SetUp ()
 		{
@@ -114,6 +134,9 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (InvisibleClass)), "attribute");
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (PrivateClass)), "private");
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (GenericClass<int>)), "generic");
+			Assert.IsTrue (Marshal.IsTypeVisibleFromCom (typeof (ImportedInterface)), "imported interface");
+			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (GenericImportedInterface<>)), "generic imported interface");
+			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (GenericImportedInterface<int>)), "constructed generic imported interface");
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (VisibleClass[])), "array");
 			Assert.Throws<ArgumentNullException> (() => Marshal.IsTypeVisibleFromCom (null), "null");
 
@@ -137,6 +160,10 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Assembly assembly = Assembly.LoadFrom (path);
 			Type type = assembly.GetType ("MonoTests.RegistrationServices.TestObject", true);
 			RegistrationServices services = new RegistrationServices ();
+			using (RegistryKey categoryKey = Registry.ClassesRoot.CreateSubKey (ManagedCategoryPath)) {
+				categoryKey.SetValue ("0", ".NET Category");
+				categoryKey.SetValue (ThirdPartyValue, "preserve");
+			}
 
 			Assert.IsTrue (services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None), "register");
 
@@ -162,6 +189,10 @@ namespace MonoTests.System.Runtime.InteropServices {
 				Assert.AreEqual ("HKEY_CLASSES_ROOT\\CLSID\\" + DerivedClassId,
 					callbackKey.GetValue ("DerivedRegister"), "derived callback overrides base callback");
 			}
+			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath)) {
+				Assert.AreEqual (".NET Category", categoryKey.GetValue ("0"), "existing managed category description");
+				Assert.AreEqual ("preserve", categoryKey.GetValue (ThirdPartyValue), "existing managed category data");
+			}
 
 			Assert.IsTrue (services.UnregisterAssembly (assembly), "unregister");
 			Assert.IsNull (Registry.ClassesRoot.OpenSubKey (ProgId), "removed ProgID");
@@ -176,6 +207,111 @@ namespace MonoTests.System.Runtime.InteropServices {
 			}
 		}
 
+		[Test]
+		public void PrimaryInteropAssemblyFailsBeforeRegistryChanges ()
+		{
+			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location),
+				"RegistrationServicesPIATestAssembly.dll");
+			Assembly assembly = Assembly.LoadFrom (path);
+			RegistrationServices services = new RegistrationServices ();
+
+			NotImplementedException registerError = Assert.Throws<NotImplementedException> (() =>
+				services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None));
+			StringAssert.Contains ("Primary interop assembly", registerError.Message, "register message");
+
+			NotImplementedException unregisterError = Assert.Throws<NotImplementedException> (() =>
+				services.UnregisterAssembly (assembly));
+			StringAssert.Contains ("Primary interop assembly", unregisterError.Message, "unregister message");
+
+			if (Environment.OSVersion.Platform == PlatformID.Win32NT) {
+				Assert.IsNull (Registry.ClassesRoot.OpenSubKey (ProgId), "no partial ProgID");
+				Assert.IsNull (Registry.ClassesRoot.OpenSubKey ("CLSID\\" + ClassId), "no partial CLSID");
+				Assert.IsNull (Registry.ClassesRoot.OpenSubKey (CallbackPath), "no callback");
+			}
+		}
+
+		[Test]
+		public void UnregisterPreservesOtherVersionsAndForeignData ()
+		{
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				Assert.Ignore ("COM registration is only supported on Windows.");
+
+			RegistrationServices services = new RegistrationServices ();
+			Assembly first = CreateDynamicRegistrationAssembly ("RegistrationVersionOne", new Version (1, 0, 0, 0),
+				"MonoTests.RegistrationServices.VersionedObject", DynamicClassId, null);
+			Assembly second = CreateDynamicRegistrationAssembly ("RegistrationVersionTwo", new Version (2, 0, 0, 0),
+				"MonoTests.RegistrationServices.VersionedObject", DynamicClassId, null);
+
+			Assert.IsTrue (services.RegisterAssembly (first, AssemblyRegistrationFlags.None), "register first");
+			Assert.IsTrue (services.RegisterAssembly (second, AssemblyRegistrationFlags.None), "register second");
+
+			string serverPath = "CLSID\\" + DynamicClassId + "\\InprocServer32";
+			using (RegistryKey serverKey = Registry.ClassesRoot.OpenSubKey (serverPath, true)) {
+				serverKey.SetValue ("ForeignValue", "preserve");
+				using (RegistryKey versionKey = serverKey.OpenSubKey ("1.0.0.0", true))
+					versionKey.SetValue ("ForeignVersionValue", "preserve");
+			}
+
+			Assert.IsTrue (services.UnregisterAssembly (first), "unregister first");
+			using (RegistryKey serverKey = Registry.ClassesRoot.OpenSubKey (serverPath)) {
+				Assert.IsNotNull (serverKey, "server retained");
+				Assert.AreEqual ("preserve", serverKey.GetValue ("ForeignValue"), "foreign server value");
+				Assert.IsNull (serverKey.GetValue ("Assembly"), "top-level assembly removed for compatibility");
+				Assert.IsNotNull (serverKey.OpenSubKey ("1.0.0.0"), "foreign data keeps old version key");
+				Assert.IsNotNull (serverKey.OpenSubKey ("2.0.0.0"), "other version retained");
+			}
+
+			Assert.IsTrue (services.UnregisterAssembly (second), "unregister second");
+			using (RegistryKey serverKey = Registry.ClassesRoot.OpenSubKey (serverPath)) {
+				Assert.IsNotNull (serverKey, "foreign data keeps server key");
+				Assert.AreEqual ("preserve", serverKey.GetValue ("ForeignValue"), "foreign server value after all versions");
+			}
+		}
+
+		[Test]
+		public void InvalidCallbackReportsAssemblyTypeAndMethodBeforeRegistryChanges ()
+		{
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				Assert.Ignore ("COM registration is only supported on Windows.");
+
+			const string typeName = "MonoTests.RegistrationServices.InvalidCallbackObject";
+			const string methodName = "InvalidRegister";
+			Assembly assembly = CreateDynamicRegistrationAssembly ("InvalidRegistrationCallbackAssembly",
+				new Version (1, 0, 0, 0), typeName, InvalidCallbackClassId, methodName);
+			RegistrationServices services = new RegistrationServices ();
+
+			InvalidOperationException error = Assert.Throws<InvalidOperationException> (() =>
+				services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None));
+			StringAssert.Contains (assembly.FullName, error.Message, "assembly");
+			StringAssert.Contains (typeName, error.Message, "type");
+			StringAssert.Contains (methodName, error.Message, "method");
+			Assert.IsNull (Registry.ClassesRoot.OpenSubKey ("CLSID\\" + InvalidCallbackClassId), "no partial CLSID");
+		}
+
+		static Assembly CreateDynamicRegistrationAssembly (string assemblyName, Version version, string typeName,
+			string classId, string invalidCallbackName)
+		{
+			AssemblyName name = new AssemblyName (assemblyName);
+			name.Version = version;
+			AssemblyBuilder assembly = AppDomain.CurrentDomain.DefineDynamicAssembly (name, AssemblyBuilderAccess.Run);
+			ModuleBuilder module = assembly.DefineDynamicModule (assemblyName);
+			TypeBuilder type = module.DefineType (typeName, TypeAttributes.Public | TypeAttributes.Class);
+			type.DefineDefaultConstructor (MethodAttributes.Public);
+			type.SetCustomAttribute (new CustomAttributeBuilder (typeof (GuidAttribute).GetConstructor (
+				new Type[] { typeof (string) }), new object[] { classId.Trim ('{', '}') }));
+			if (invalidCallbackName != null) {
+				MethodBuilder callback = type.DefineMethod (invalidCallbackName,
+					MethodAttributes.Public | MethodAttributes.Static, typeof (int), new Type[] { typeof (Type) });
+				callback.SetCustomAttribute (new CustomAttributeBuilder (typeof (ComRegisterFunctionAttribute).GetConstructor (
+					Type.EmptyTypes), new object[0]));
+				ILGenerator generator = callback.GetILGenerator ();
+				generator.Emit (OpCodes.Ldc_I4_0);
+				generator.Emit (OpCodes.Ret);
+			}
+			type.CreateType ();
+			return assembly;
+		}
+
 		static void RemoveTestKeys ()
 		{
 			Registry.ClassesRoot.DeleteSubKeyTree (ProgId, false);
@@ -183,6 +319,13 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Registry.ClassesRoot.DeleteSubKeyTree (DerivedProgId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + DerivedClassId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree (CallbackPath, false);
+			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + DynamicClassId, false);
+			Registry.ClassesRoot.DeleteSubKeyTree (DynamicProgId, false);
+			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + InvalidCallbackClassId, false);
+			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath, true)) {
+				if (categoryKey != null)
+					categoryKey.DeleteValue (ThirdPartyValue, false);
+			}
 		}
 	}
 }
