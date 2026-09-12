@@ -68,12 +68,25 @@ namespace MonoTests.System.Runtime.InteropServices {
 			}
 		}
 
+		[ComVisible (true)]
+		public class GenericClass<T> {
+			public GenericClass ()
+			{
+			}
+		}
+
+		[ComVisible (true)]
+		class PrivateClass {
+			public PrivateClass ()
+			{
+			}
+		}
+
 		[SetUp]
 		public void SetUp ()
 		{
-			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-				Assert.Ignore ("COM registration is only supported on Windows.");
-			RemoveTestKeys ();
+			if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+				RemoveTestKeys ();
 		}
 
 		[TearDown]
@@ -95,9 +108,31 @@ namespace MonoTests.System.Runtime.InteropServices {
 		}
 
 		[Test]
+		public void TypeVisibility ()
+		{
+			Assert.IsTrue (Marshal.IsTypeVisibleFromCom (typeof (VisibleClass)), "visible");
+			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (InvisibleClass)), "attribute");
+			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (PrivateClass)), "private");
+			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (GenericClass<int>)), "generic");
+			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (VisibleClass[])), "array");
+			Assert.Throws<ArgumentNullException> (() => Marshal.IsTypeVisibleFromCom (null), "null");
+
+			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location),
+				"RegistrationServicesTestAssembly.dll");
+			Assembly assembly = Assembly.LoadFrom (path);
+			Assert.IsTrue (Marshal.IsTypeVisibleFromCom (assembly.GetType (
+				"MonoTests.RegistrationServices.TestObject", true)), "type overrides assembly");
+			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (assembly.GetType (
+				"MonoTests.RegistrationServices.CallbackBase", true)), "assembly and type hidden");
+		}
+
+		[Test]
 		public void RegisterAndUnregisterAssembly ()
 		{
-			string path = Path.Combine (AppDomain.CurrentDomain.BaseDirectory,
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				Assert.Ignore ("COM registration is only supported on Windows.");
+
+			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location),
 				"RegistrationServicesTestAssembly.dll");
 			Assembly assembly = Assembly.LoadFrom (path);
 			Type type = assembly.GetType ("MonoTests.RegistrationServices.TestObject", true);
