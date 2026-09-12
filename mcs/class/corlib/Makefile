@@ -242,12 +242,17 @@ satellite_assembly1 = $(test_lib_dir)/es-ES/$(patsubst %.dll,%.resources.dll,$(t
 satellite_assembly2 = $(test_lib_dir)/nn-NO/$(patsubst %.dll,%.resources.dll,$(test_lib))
 
 registration_services_test_assembly = $(test_lib_dir)/RegistrationServicesTestAssembly.dll
+registration_services_pia_test_assembly = $(test_lib_dir)/RegistrationServicesPIATestAssembly.dll
 
 ifndef MOBILE_PROFILE
 $(registration_services_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesTestAssembly.cs | $(test_lib_dir)
 	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -out:$@ $<
 
-$(test_lib_output): $(registration_services_test_assembly)
+$(registration_services_pia_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesTestAssembly.cs | $(test_lib_dir)
+	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -d:PRIMARY_INTEROP_ASSEMBLY \
+		-keyfile:$(topdir)/class/mono.snk -out:$@ $<
+
+$(test_lib_output): $(registration_services_test_assembly) $(registration_services_pia_test_assembly)
 endif
 
 $(test_lib_output): $(TEST_RESOURCES) $(satellite_assembly1) $(satellite_assembly2) | $(test_lib_dir)

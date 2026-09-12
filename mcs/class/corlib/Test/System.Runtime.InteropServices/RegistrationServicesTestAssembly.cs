@@ -30,6 +30,10 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 [assembly: ComVisible (false)]
+#if PRIMARY_INTEROP_ASSEMBLY
+[assembly: Guid ("9E62C12A-0CB9-4B9A-AE9B-F4318AFD6A71")]
+[assembly: PrimaryInteropAssembly (1, 0)]
+#endif
 
 namespace MonoTests.RegistrationServices {
 	static class CallbackState {
