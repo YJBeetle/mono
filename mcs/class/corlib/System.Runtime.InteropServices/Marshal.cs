@@ -816,13 +816,13 @@ namespace System.Runtime.InteropServices
 			if (t == null)
 				throw new ArgumentNullException ("t");
 
+			if (t.IsArray || t.IsGenericType || t.IsGenericParameter || !t.IsVisible)
+				return false;
+
 			// Imported COM interfaces remain visible regardless of the managed
 			// visibility attributes applied to their containing assembly.
 			if (t.IsInterface && t.IsImport)
 				return true;
-
-			if (t.IsArray || t.IsGenericType || t.IsGenericParameter || !t.IsVisible)
-				return false;
 
 			object[] attributes = t.GetCustomAttributes (typeof (ComVisibleAttribute), false);
 			if (attributes.Length != 0)

@@ -95,10 +95,15 @@ namespace System.Runtime.InteropServices
 					throw new InvalidOperationException ("The assembly does not have a code base.");
 			}
 
+			Type[] types = GetRegistrableTypesInAssembly (assembly);
+			object[] primaryInteropAttributes = assembly.GetCustomAttributes (typeof (PrimaryInteropAssemblyAttribute), false);
+			ThrowIfPrimaryInteropAssembly (assembly, primaryInteropAttributes);
+
+			MethodInfo[] callbacks = GetUserDefinedRegistrationMethods (types, true);
 			string version = assembly.GetName ().Version.ToString ();
 			string runtimeVersion = assembly.ImageRuntimeVersion;
-			Type[] types = GetRegistrableTypesInAssembly (assembly);
-			foreach (Type type in types) {
+			for (int i = 0; i < types.Length; ++i) {
+				Type type = types[i];
 				if (type.IsValueType)
 					RegisterValueType (type, assemblyName, version, codeBase, runtimeVersion);
 				else if (TypeRepresentsComType (type))
@@ -106,12 +111,8 @@ namespace System.Runtime.InteropServices
 				else
 					RegisterManagedType (type, assemblyName, version, codeBase, runtimeVersion);
 
-				CallUserDefinedRegistrationMethod (type, true);
+				CallUserDefinedRegistrationMethod (type, callbacks[i]);
 			}
-
-			object[] primaryInteropAttributes = assembly.GetCustomAttributes (typeof (PrimaryInteropAssemblyAttribute), false);
-			foreach (PrimaryInteropAssemblyAttribute attribute in primaryInteropAttributes)
-				RegisterPrimaryInteropAssembly (assembly, attribute, codeBase);
 
 			return types.Length != 0 || primaryInteropAttributes.Length != 0;
 		}
@@ -158,22 +159,20 @@ namespace System.Runtime.InteropServices
 				throw new InvalidOperationException ("A reflection-only assembly cannot be unregistered.");
 
 			Type[] types = GetRegistrableTypesInAssembly (assembly);
-			string version = assembly.GetName ().Version.ToString ();
-			bool allVersionsRemoved = true;
-			foreach (Type type in types) {
-				CallUserDefinedRegistrationMethod (type, false);
-				if (type.IsValueType)
-					allVersionsRemoved &= UnregisterValueType (type, version);
-				else if (TypeRepresentsComType (type))
-					allVersionsRemoved &= UnregisterComImportedType (type, version);
-				else
-					allVersionsRemoved &= UnregisterManagedType (type, version);
-			}
-
 			object[] primaryInteropAttributes = assembly.GetCustomAttributes (typeof (PrimaryInteropAssemblyAttribute), false);
-			if (allVersionsRemoved) {
-				foreach (PrimaryInteropAssemblyAttribute attribute in primaryInteropAttributes)
-					UnregisterPrimaryInteropAssembly (assembly, attribute);
+			ThrowIfPrimaryInteropAssembly (assembly, primaryInteropAttributes);
+
+			MethodInfo[] callbacks = GetUserDefinedRegistrationMethods (types, false);
+			string version = assembly.GetName ().Version.ToString ();
+			for (int i = 0; i < types.Length; ++i) {
+				Type type = types[i];
+				CallUserDefinedRegistrationMethod (type, callbacks[i]);
+				if (type.IsValueType)
+					UnregisterValueType (type, version);
+				else if (TypeRepresentsComType (type))
+					UnregisterComImportedType (type, version);
+				else
+					UnregisterManagedType (type, version);
 			}
 
 			return types.Length != 0 || primaryInteropAttributes.Length != 0;
@@ -261,48 +260,37 @@ namespace System.Runtime.InteropServices
 
 		static void EnsureManagedCategoryExists ()
 		{
+			if (ManagedCategoryExists ())
+				return;
+
 			using (RegistryKey key = Registry.ClassesRoot.CreateSubKey ("Component Categories\\" + managedCategory)) {
-				if (key.GetValue ("0") == null)
-					key.SetValue ("0", managedCategoryDescription);
+				key.SetValue ("0", managedCategoryDescription);
 			}
 		}
 
-		static string GetPrimaryInteropAssemblyVersion (PrimaryInteropAssemblyAttribute attribute)
+		static bool ManagedCategoryExists ()
 		{
-			return attribute.MajorVersion.ToString ("x", CultureInfo.InvariantCulture) + "." +
-				attribute.MinorVersion.ToString ("x", CultureInfo.InvariantCulture);
+			using (RegistryKey key = Registry.ClassesRoot.OpenSubKey ("Component Categories\\" + managedCategory)) {
+				if (key == null)
+					return false;
+				return String.Equals (key.GetValue ("0") as string, managedCategoryDescription,
+					StringComparison.Ordinal);
+			}
 		}
 
-		static void RegisterPrimaryInteropAssembly (Assembly assembly, PrimaryInteropAssemblyAttribute attribute,
-			string codeBase)
+		static void ThrowIfPrimaryInteropAssembly (Assembly assembly, object[] attributes)
 		{
+			if (attributes.Length == 0)
+				return;
+
 			byte[] publicKey = assembly.GetName ().GetPublicKey ();
 			if (publicKey == null || publicKey.Length == 0)
 				throw new InvalidOperationException ("A primary interop assembly must be strong named.");
 
-			string typeLibraryId = "{" + Marshal.GetTypeLibGuidForAssembly (assembly).ToString ().ToUpper (CultureInfo.InvariantCulture) + "}";
-			using (RegistryKey key = Registry.ClassesRoot.CreateSubKey ("TypeLib\\" + typeLibraryId + "\\" +
-				GetPrimaryInteropAssemblyVersion (attribute))) {
-				key.SetValue ("PrimaryInteropAssemblyName", assembly.FullName);
-				if (codeBase != null)
-					key.SetValue ("PrimaryInteropAssemblyCodeBase", codeBase);
-			}
-		}
-
-		static void UnregisterPrimaryInteropAssembly (Assembly assembly, PrimaryInteropAssemblyAttribute attribute)
-		{
-			string typeLibraryId = "{" + Marshal.GetTypeLibGuidForAssembly (assembly).ToString ().ToUpper (CultureInfo.InvariantCulture) + "}";
-			string typeLibraryPath = "TypeLib\\" + typeLibraryId;
-			using (RegistryKey key = Registry.ClassesRoot.OpenSubKey (typeLibraryPath + "\\" +
-				GetPrimaryInteropAssemblyVersion (attribute), true)) {
-				if (key != null) {
-					key.DeleteValue ("PrimaryInteropAssemblyName", false);
-					key.DeleteValue ("PrimaryInteropAssemblyCodeBase", false);
-				}
-			}
-			DeleteSubKeyIfEmpty (Registry.ClassesRoot, typeLibraryPath + "\\" +
-				GetPrimaryInteropAssemblyVersion (attribute));
-			DeleteSubKeyIfEmpty (Registry.ClassesRoot, typeLibraryPath);
+			// PIA registration depends on Marshal.GetTypeLibGuidForAssembly, whose
+			// fallback GUID generation is not implemented by Mono. Fail before any
+			// registry changes or callbacks instead of leaving a partial registration.
+			throw new NotImplementedException ("Primary interop assembly registration and unregistration are not implemented.");
 		}
 
 		bool UnregisterManagedType (Type type, string version)
@@ -317,6 +305,8 @@ namespace System.Runtime.InteropServices
 						if (serverKey != null) {
 							RemoveVersion (serverKey, version);
 							allVersionsRemoved = serverKey.SubKeyCount == 0;
+							// The .NET Framework removes these unversioned values even when
+							// another version subkey remains. Preserve that compatibility behavior.
 							DeleteRegistrationValues (serverKey);
 							if (allVersionsRemoved) {
 								serverKey.DeleteValue (String.Empty, false);
@@ -428,7 +418,15 @@ namespace System.Runtime.InteropServices
 				parent.DeleteSubKey (name, false);
 		}
 
-		void CallUserDefinedRegistrationMethod (Type type, bool register)
+		static MethodInfo[] GetUserDefinedRegistrationMethods (Type[] types, bool register)
+		{
+			MethodInfo[] callbacks = new MethodInfo[types.Length];
+			for (int i = 0; i < types.Length; ++i)
+				callbacks[i] = GetUserDefinedRegistrationMethod (types[i], register);
+			return callbacks;
+		}
+
+		static MethodInfo GetUserDefinedRegistrationMethod (Type type, bool register)
 		{
 			Type attributeType = register ? typeof (ComRegisterFunctionAttribute) : typeof (ComUnregisterFunctionAttribute);
 			MethodInfo callback = null;
@@ -439,7 +437,10 @@ namespace System.Runtime.InteropServices
 					if (!method.IsDefined (attributeType, true))
 						continue;
 					if (callback != null)
-						throw new InvalidOperationException ("A type cannot have more than one COM registration callback.");
+						throw new InvalidOperationException (String.Format (CultureInfo.InvariantCulture,
+							"Type '{0}' in assembly '{1}' cannot have more than one {2} callback; found methods '{3}' and '{4}'.",
+							type.FullName, type.Assembly.FullName, register ? "COM registration" : "COM unregistration",
+							callback.Name, method.Name));
 					callback = method;
 				}
 				if (callback != null)
@@ -447,15 +448,34 @@ namespace System.Runtime.InteropServices
 			}
 
 			if (callback == null)
-				return;
+				return null;
 			if (!callback.IsStatic)
-				throw new InvalidOperationException ("A COM registration callback must be static.");
+				throw InvalidRegistrationCallback (type, callback, register, "must be static");
 
 			ParameterInfo[] parameters = callback.GetParameters ();
 			if (callback.ReturnType != typeof (void) || parameters.Length != 1 ||
 				(parameters[0].ParameterType != typeof (string) && parameters[0].ParameterType != typeof (Type)))
-				throw new InvalidOperationException ("A COM registration callback must return void and accept a string or Type argument.");
+				throw InvalidRegistrationCallback (type, callback, register,
+					"must return void and accept a string or Type argument");
 
+			return callback;
+		}
+
+		static InvalidOperationException InvalidRegistrationCallback (Type type, MethodInfo callback, bool register,
+			string requirement)
+		{
+			return new InvalidOperationException (String.Format (CultureInfo.InvariantCulture,
+				"COM {0} callback '{1}.{2}' selected for type '{3}' in assembly '{4}' {5}.",
+				register ? "registration" : "unregistration", callback.DeclaringType.FullName, callback.Name,
+				type.FullName, type.Assembly.FullName, requirement));
+		}
+
+		static void CallUserDefinedRegistrationMethod (Type type, MethodInfo callback)
+		{
+			if (callback == null)
+				return;
+
+			ParameterInfo[] parameters = callback.GetParameters ();
 			object argument = parameters[0].ParameterType == typeof (Type) ? (object) type :
 				"HKEY_CLASSES_ROOT\\CLSID\\" + GetGuidString (type);
 			callback.Invoke (null, new object[] { argument });
