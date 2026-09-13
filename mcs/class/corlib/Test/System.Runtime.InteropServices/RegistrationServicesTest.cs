@@ -29,6 +29,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security;
 using Microsoft.Win32;
 
 using NUnit.Framework;
@@ -37,20 +38,6 @@ namespace MonoTests.System.Runtime.InteropServices {
 
 	[TestFixture]
 	public class RegistrationServicesTest {
-		const string ClassId = "{5E4466A3-2BA4-414E-B70B-317D91BE57CC}";
-		const string ProgId = "MonoTests.RegistrationServices.TestObject";
-		const string DerivedClassId = "{641D963E-EA94-4E4F-B6EF-1DFEB43FB697}";
-		const string DerivedProgId = "MonoTests.RegistrationServices.DerivedTestObject";
-		const string CallbackPath = "MonoTests.RegistrationServices.CallbackState";
-		const string ManagedCategoryPath = "Component Categories\\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}";
-		const string ThirdPartyValue = "MonoRegistrationServicesTest";
-		const string DynamicClassId = "{5C9782F8-3BAA-42C7-A461-B8C94F2FA438}";
-		const string DynamicProgId = "MonoTests.RegistrationServices.VersionedObject";
-		const string InvalidCallbackClassId = "{F81E4AE1-917F-43C8-BD29-A56B182287AA}";
-		const string InvalidCallbackProgId = "MonoTests.RegistrationServices.InvalidCallbackObject";
-		const string GenericCallbackClassId = "{86F43A7E-B430-4F56-9C6C-DD61BA460217}";
-		const string GenericCallbackProgId = "MonoTests.RegistrationServices.GenericCallbackObject";
-
 		[ComVisible (true)]
 		public class VisibleClass {
 			public VisibleClass ()
@@ -111,20 +98,6 @@ namespace MonoTests.System.Runtime.InteropServices {
 		public interface GenericImportedInterface<T> {
 		}
 
-		[SetUp]
-		public void SetUp ()
-		{
-			if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-				RemoveTestKeys ();
-		}
-
-		[TearDown]
-		public void TearDown ()
-		{
-			if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-				RemoveTestKeys ();
-		}
-
 		[Test]
 		public void TypeRequiresRegistration ()
 		{
@@ -158,6 +131,64 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (assembly.GetType (
 				"MonoTests.RegistrationServices.CallbackBase", true)), "assembly and type hidden");
 		}
+	}
+
+	[TestFixture]
+	public class RegistrationServicesRegistryTest {
+		const string ClassId = "{5E4466A3-2BA4-414E-B70B-317D91BE57CC}";
+		const string ProgId = "MonoTests.RegistrationServices.TestObject";
+		const string DerivedClassId = "{641D963E-EA94-4E4F-B6EF-1DFEB43FB697}";
+		const string DerivedProgId = "MonoTests.RegistrationServices.DerivedTestObject";
+		const string EmptyProgIdClassId = "{F0439499-B07C-4FA5-BC3B-8402B70B3AFF}";
+		const string CallbackPath = "MonoTests.RegistrationServices.CallbackState";
+		const string ManagedCategoryPath = "Component Categories\\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}";
+		const string ManagedCategoryDescription = ".NET Category";
+		const string ThirdPartyValue = "MonoRegistrationServicesTest";
+		const string DynamicClassId = "{5C9782F8-3BAA-42C7-A461-B8C94F2FA438}";
+		const string DynamicProgId = "MonoTests.RegistrationServices.VersionedObject";
+		const string InvalidCallbackClassId = "{F81E4AE1-917F-43C8-BD29-A56B182287AA}";
+		const string InvalidCallbackProgId = "MonoTests.RegistrationServices.InvalidCallbackObject";
+		const string GenericCallbackClassId = "{86F43A7E-B430-4F56-9C6C-DD61BA460217}";
+		const string GenericCallbackProgId = "MonoTests.RegistrationServices.GenericCallbackObject";
+
+		ManagedCategoryState managedCategoryState;
+		bool registrySetupSucceeded;
+
+		[SetUp]
+		public void SetUp ()
+		{
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				return;
+
+			try {
+				RemoveTestKeys ();
+				managedCategoryState = new ManagedCategoryState ();
+				registrySetupSucceeded = true;
+			} catch (UnauthorizedAccessException) {
+				Assert.Ignore ("COM registry tests require write access to their test keys and category fixture.");
+			} catch (SecurityException) {
+				Assert.Ignore ("COM registry tests require write access to their test keys and category fixture.");
+			}
+		}
+
+		[TearDown]
+		public void TearDown ()
+		{
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				return;
+			if (!registrySetupSucceeded)
+				return;
+
+			try {
+				RemoveTestKeys ();
+			} finally {
+				if (managedCategoryState != null) {
+					managedCategoryState.Dispose ();
+					managedCategoryState = null;
+				}
+				registrySetupSucceeded = false;
+			}
+		}
 
 		[Test]
 		public void RegisterAndUnregisterAssembly ()
@@ -165,16 +196,11 @@ namespace MonoTests.System.Runtime.InteropServices {
 			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
 				Assert.Ignore ("COM registration is only supported on Windows.");
 
-			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location),
+			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesRegistryTest).Assembly.Location),
 				"RegistrationServicesTestAssembly.dll");
 			Assembly assembly = Assembly.LoadFrom (path);
 			Type type = assembly.GetType ("MonoTests.RegistrationServices.TestObject", true);
 			RegistrationServices services = new RegistrationServices ();
-			using (RegistryKey categoryKey = Registry.ClassesRoot.CreateSubKey (ManagedCategoryPath)) {
-				categoryKey.SetValue ("0", ".NET Category");
-				categoryKey.SetValue (ThirdPartyValue, "preserve");
-			}
-
 			Assert.IsTrue (services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None), "register");
 
 			using (RegistryKey progIdKey = Registry.ClassesRoot.OpenSubKey (ProgId)) {
@@ -200,7 +226,7 @@ namespace MonoTests.System.Runtime.InteropServices {
 					callbackKey.GetValue ("DerivedRegister"), "derived callback overrides base callback");
 			}
 			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath)) {
-				Assert.AreEqual (".NET Category", categoryKey.GetValue ("0"), "existing managed category description");
+				Assert.AreEqual (ManagedCategoryDescription, categoryKey.GetValue ("0"), "existing managed category description");
 				Assert.AreEqual ("preserve", categoryKey.GetValue (ThirdPartyValue), "existing managed category data");
 			}
 
@@ -218,9 +244,37 @@ namespace MonoTests.System.Runtime.InteropServices {
 		}
 
 		[Test]
+		public void EmptyProgIdPreservesForeignClassProgId ()
+		{
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				Assert.Ignore ("COM registration is only supported on Windows.");
+
+			const string foreignProgId = "Foreign.Component.ProgId";
+			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesRegistryTest).Assembly.Location),
+				"RegistrationServicesTestAssembly.dll");
+			Assembly assembly = Assembly.LoadFrom (path);
+			RegistrationServices services = new RegistrationServices ();
+			using (RegistryKey progIdKey = Registry.ClassesRoot.CreateSubKey (
+				"CLSID\\" + EmptyProgIdClassId + "\\ProgId"))
+				progIdKey.SetValue (String.Empty, foreignProgId);
+
+			Assert.IsTrue (services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None), "register");
+			using (RegistryKey progIdKey = Registry.ClassesRoot.OpenSubKey (
+				"CLSID\\" + EmptyProgIdClassId + "\\ProgId"))
+				Assert.AreEqual (foreignProgId, progIdKey.GetValue (String.Empty), "register preserves foreign ProgID");
+
+			Assert.IsTrue (services.UnregisterAssembly (assembly), "unregister");
+			using (RegistryKey progIdKey = Registry.ClassesRoot.OpenSubKey (
+				"CLSID\\" + EmptyProgIdClassId + "\\ProgId")) {
+				Assert.IsNotNull (progIdKey, "foreign ProgID key retained");
+				Assert.AreEqual (foreignProgId, progIdKey.GetValue (String.Empty), "unregister preserves foreign ProgID");
+			}
+		}
+
+		[Test]
 		public void PrimaryInteropAssemblyFailsBeforeRegistryChanges ()
 		{
-			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location),
+			string path = Path.Combine (Path.GetDirectoryName (typeof (RegistrationServicesRegistryTest).Assembly.Location),
 				"RegistrationServicesPIATestAssembly.dll");
 			Assembly assembly = Assembly.LoadFrom (path);
 			RegistrationServices services = new RegistrationServices ();
@@ -246,7 +300,7 @@ namespace MonoTests.System.Runtime.InteropServices {
 			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
 				Assert.Ignore ("COM registration is only supported on Windows.");
 
-			string testDirectory = Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location);
+			string testDirectory = Path.GetDirectoryName (typeof (RegistrationServicesRegistryTest).Assembly.Location);
 			string assemblyName = "RegistrationServicesVersionedTestAssembly.dll";
 			Assembly first = Assembly.LoadFile (Path.Combine (testDirectory, "RegistrationVersion1", assemblyName));
 			Assembly second = Assembly.LoadFile (Path.Combine (testDirectory, "RegistrationVersion2", assemblyName));
@@ -324,7 +378,7 @@ namespace MonoTests.System.Runtime.InteropServices {
 		static Assembly LoadBoundaryTestAssembly (string name)
 		{
 			return Assembly.LoadFrom (Path.Combine (
-				Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location), name));
+				Path.GetDirectoryName (typeof (RegistrationServicesRegistryTest).Assembly.Location), name));
 		}
 
 		static void RemoveTestKeys ()
@@ -333,6 +387,7 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + ClassId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree (DerivedProgId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + DerivedClassId, false);
+			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + EmptyProgIdClassId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree (CallbackPath, false);
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + DynamicClassId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree (DynamicProgId, false);
@@ -340,9 +395,105 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + InvalidCallbackClassId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree (GenericCallbackProgId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + GenericCallbackClassId, false);
-			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath, true)) {
-				if (categoryKey != null)
-					categoryKey.DeleteValue (ThirdPartyValue, false);
+		}
+
+		sealed class ManagedCategoryState : IDisposable {
+			readonly bool keyExisted;
+			readonly RegistryValueState description;
+			readonly RegistryValueState thirdPartyValue;
+			bool restored;
+
+			public ManagedCategoryState ()
+			{
+				using (RegistryKey key = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath)) {
+					keyExisted = key != null;
+					description = RegistryValueState.Capture (key, "0");
+					thirdPartyValue = RegistryValueState.Capture (key, ThirdPartyValue);
+				}
+
+				try {
+					using (RegistryKey key = Registry.ClassesRoot.CreateSubKey (ManagedCategoryPath)) {
+						key.SetValue ("0", ManagedCategoryDescription);
+						key.SetValue (ThirdPartyValue, "preserve");
+					}
+				} catch {
+					Restore ();
+					throw;
+				}
+			}
+
+			public void Dispose ()
+			{
+				Restore ();
+			}
+
+			void Restore ()
+			{
+				if (restored)
+					return;
+				restored = true;
+
+				RegistryKey key = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath, true);
+				if (key == null && (description.Exists || thirdPartyValue.Exists))
+					key = Registry.ClassesRoot.CreateSubKey (ManagedCategoryPath);
+				if (key != null) {
+					using (key) {
+						description.Restore (key, "0");
+						thirdPartyValue.Restore (key, ThirdPartyValue);
+					}
+				}
+
+				if (!keyExisted)
+					DeleteManagedCategoryIfEmpty ();
+			}
+
+			static void DeleteManagedCategoryIfEmpty ()
+			{
+				bool empty = false;
+				using (RegistryKey key = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath)) {
+					if (key != null)
+						empty = key.SubKeyCount == 0 && key.ValueCount == 0;
+				}
+				if (empty)
+					Registry.ClassesRoot.DeleteSubKey (ManagedCategoryPath, false);
+			}
+		}
+
+		struct RegistryValueState {
+			readonly bool exists;
+			readonly object value;
+			readonly RegistryValueKind kind;
+
+			RegistryValueState (bool exists, object value, RegistryValueKind kind)
+			{
+				this.exists = exists;
+				this.value = value;
+				this.kind = kind;
+			}
+
+			public bool Exists {
+				get { return exists; }
+			}
+
+			public static RegistryValueState Capture (RegistryKey key, string name)
+			{
+				if (key == null)
+					return new RegistryValueState (false, null, RegistryValueKind.None);
+
+				foreach (string valueName in key.GetValueNames ()) {
+					if (String.Equals (valueName, name, StringComparison.OrdinalIgnoreCase))
+						return new RegistryValueState (true, key.GetValue (name, null,
+							RegistryValueOptions.DoNotExpandEnvironmentNames), key.GetValueKind (name));
+				}
+				return new RegistryValueState (false, null, RegistryValueKind.None);
+			}
+
+			public void Restore (RegistryKey key, string name)
+			{
+				if (exists)
+					key.SetValue (name, value, kind);
+				else
+					key.DeleteValue (name, false);
 			}
 		}
 	}

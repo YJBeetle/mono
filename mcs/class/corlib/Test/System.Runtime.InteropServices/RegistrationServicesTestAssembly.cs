@@ -67,6 +67,15 @@ namespace MonoTests.RegistrationServices {
 		}
 	}
 
+	[ComVisible (true)]
+	[Guid ("F0439499-B07C-4FA5-BC3B-8402B70B3AFF")]
+	[ProgId ("")]
+	public class EmptyProgIdTestObject {
+		public EmptyProgIdTestObject ()
+		{
+		}
+	}
+
 	[ComVisible (false)]
 	public abstract class CallbackBase {
 		[ComRegisterFunction]
