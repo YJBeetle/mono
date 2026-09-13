@@ -198,6 +198,7 @@ endif
 
 EXTRA_DISTFILES = \
 	Test/resources/culture-*.cs		\
+	Test/System.Runtime.InteropServices/RegistrationServicesBoundaryTestAssembly.cs \
 	Test/System.Runtime.InteropServices/RegistrationServicesTestAssembly.cs \
 	$(RESOURCE_FILES) \
 	$(TEST_RESOURCE_FILES) \
@@ -239,6 +240,10 @@ satellite_assembly2 = $(test_lib_dir)/nn-NO/$(patsubst %.dll,%.resources.dll,$(t
 
 registration_services_test_assembly = $(test_lib_dir)/RegistrationServicesTestAssembly.dll
 registration_services_pia_test_assembly = $(test_lib_dir)/RegistrationServicesPIATestAssembly.dll
+registration_services_version_one_test_assembly = $(test_lib_dir)/RegistrationVersion1/RegistrationServicesVersionedTestAssembly.dll
+registration_services_version_two_test_assembly = $(test_lib_dir)/RegistrationVersion2/RegistrationServicesVersionedTestAssembly.dll
+registration_services_invalid_callback_test_assembly = $(test_lib_dir)/RegistrationServicesInvalidCallbackTestAssembly.dll
+registration_services_generic_callback_test_assembly = $(test_lib_dir)/RegistrationServicesGenericCallbackTestAssembly.dll
 
 ifndef MOBILE_PROFILE
 $(registration_services_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesTestAssembly.cs | $(test_lib_dir)
@@ -248,7 +253,23 @@ $(registration_services_pia_test_assembly): Test/System.Runtime.InteropServices/
 	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -d:PRIMARY_INTEROP_ASSEMBLY \
 		-keyfile:$(topdir)/class/mono.snk -out:$@ $<
 
-$(test_lib_output): $(registration_services_test_assembly) $(registration_services_pia_test_assembly)
+$(registration_services_version_one_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesBoundaryTestAssembly.cs | $(test_lib_dir)
+	@mkdir -p $(dir $@)
+	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -d:VERSION_ONE -out:$@ $<
+
+$(registration_services_version_two_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesBoundaryTestAssembly.cs | $(test_lib_dir)
+	@mkdir -p $(dir $@)
+	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -d:VERSION_TWO -out:$@ $<
+
+$(registration_services_invalid_callback_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesBoundaryTestAssembly.cs | $(test_lib_dir)
+	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -d:INVALID_CALLBACK -out:$@ $<
+
+$(registration_services_generic_callback_test_assembly): Test/System.Runtime.InteropServices/RegistrationServicesBoundaryTestAssembly.cs | $(test_lib_dir)
+	$(CSCOMPILE) -target:library -r:$(mscorlib_for_profile) -d:GENERIC_CALLBACK -out:$@ $<
+
+$(test_lib_output): $(registration_services_test_assembly) $(registration_services_pia_test_assembly) \
+	$(registration_services_version_one_test_assembly) $(registration_services_version_two_test_assembly) \
+	$(registration_services_invalid_callback_test_assembly) $(registration_services_generic_callback_test_assembly)
 endif
 
 $(test_lib_output): $(TEST_RESOURCES) $(satellite_assembly1) $(satellite_assembly2) | $(test_lib_dir)
