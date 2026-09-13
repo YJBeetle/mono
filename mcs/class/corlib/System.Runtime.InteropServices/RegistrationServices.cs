@@ -449,6 +449,9 @@ namespace System.Runtime.InteropServices
 
 			if (callback == null)
 				return null;
+			if (callback.ContainsGenericParameters)
+				throw InvalidRegistrationCallback (type, callback, register,
+					"must not contain unassigned generic parameters");
 			if (!callback.IsStatic)
 				throw InvalidRegistrationCallback (type, callback, register, "must be static");
 
