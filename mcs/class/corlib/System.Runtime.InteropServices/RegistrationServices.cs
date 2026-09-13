@@ -293,7 +293,7 @@ namespace System.Runtime.InteropServices
 			throw new NotImplementedException ("Primary interop assembly registration and unregistration are not implemented.");
 		}
 
-		bool UnregisterManagedType (Type type, string version)
+		void UnregisterManagedType (Type type, string version)
 		{
 			string classId = GetGuidString (type);
 			string progId = GetProgIdForType (type);
@@ -318,7 +318,8 @@ namespace System.Runtime.InteropServices
 
 					if (allVersionsRemoved) {
 						classIdKey.DeleteValue (String.Empty, false);
-						DeleteValueAndEmptySubKey (classIdKey, "ProgId", String.Empty);
+						if (progId.Length != 0)
+							DeleteValueAndEmptySubKey (classIdKey, "ProgId", String.Empty);
 						DeleteEmptySubKeyPath (classIdKey, "Implemented Categories", managedCategory);
 					}
 				}
@@ -334,33 +335,30 @@ namespace System.Runtime.InteropServices
 				}
 				DeleteSubKeyIfEmpty (Registry.ClassesRoot, progId);
 			}
-
-			return allVersionsRemoved;
 		}
 
-		static bool UnregisterValueType (Type type, string version)
+		static void UnregisterValueType (Type type, string version)
 		{
 			string path = "Record\\" + GetGuidString (type);
 			bool empty;
 			using (RegistryKey key = Registry.ClassesRoot.OpenSubKey (path, true)) {
 				if (key == null)
-					return true;
+					return;
 				RemoveVersion (key, version);
 				empty = key.SubKeyCount == 0;
 			}
 			if (empty)
 				DeleteSubKeyIfEmpty (Registry.ClassesRoot, path);
-			return empty;
 		}
 
-		static bool UnregisterComImportedType (Type type, string version)
+		static void UnregisterComImportedType (Type type, string version)
 		{
 			string classPath = "CLSID\\" + GetGuidString (type);
 			string serverPath = classPath + "\\InprocServer32";
 			bool empty;
 			using (RegistryKey key = Registry.ClassesRoot.OpenSubKey (serverPath, true)) {
 				if (key == null)
-					return true;
+					return;
 				RemoveVersion (key, version);
 				DeleteRegistrationValues (key);
 				empty = key.SubKeyCount == 0;
@@ -369,7 +367,6 @@ namespace System.Runtime.InteropServices
 				DeleteSubKeyIfEmpty (Registry.ClassesRoot, serverPath);
 				DeleteSubKeyIfEmpty (Registry.ClassesRoot, classPath);
 			}
-			return empty;
 		}
 
 		static void RemoveVersion (RegistryKey parent, string version)
