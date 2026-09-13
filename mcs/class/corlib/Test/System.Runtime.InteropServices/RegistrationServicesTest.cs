@@ -28,7 +28,6 @@
 using System;
 using System.IO;
 using System.Reflection;
-using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -48,6 +47,9 @@ namespace MonoTests.System.Runtime.InteropServices {
 		const string DynamicClassId = "{5C9782F8-3BAA-42C7-A461-B8C94F2FA438}";
 		const string DynamicProgId = "MonoTests.RegistrationServices.VersionedObject";
 		const string InvalidCallbackClassId = "{F81E4AE1-917F-43C8-BD29-A56B182287AA}";
+		const string InvalidCallbackProgId = "MonoTests.RegistrationServices.InvalidCallbackObject";
+		const string GenericCallbackClassId = "{86F43A7E-B430-4F56-9C6C-DD61BA460217}";
+		const string GenericCallbackProgId = "MonoTests.RegistrationServices.GenericCallbackObject";
 
 		[ComVisible (true)]
 		public class VisibleClass {
@@ -97,6 +99,13 @@ namespace MonoTests.System.Runtime.InteropServices {
 
 		[ComImport]
 		[ComVisible (false)]
+		[Guid ("52E2055C-5C19-42A6-9C5B-7CC3CE9D03B2")]
+		[InterfaceType (ComInterfaceType.InterfaceIsIUnknown)]
+		internal interface InternalImportedInterface {
+		}
+
+		[ComImport]
+		[ComVisible (false)]
 		[Guid ("90E4CF83-5AE0-48C6-A3D0-8B61F3969D27")]
 		[InterfaceType (ComInterfaceType.InterfaceIsIUnknown)]
 		public interface GenericImportedInterface<T> {
@@ -135,6 +144,7 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (PrivateClass)), "private");
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (GenericClass<int>)), "generic");
 			Assert.IsTrue (Marshal.IsTypeVisibleFromCom (typeof (ImportedInterface)), "imported interface");
+			Assert.IsTrue (Marshal.IsTypeVisibleFromCom (typeof (InternalImportedInterface)), "internal imported interface");
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (GenericImportedInterface<>)), "generic imported interface");
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (GenericImportedInterface<int>)), "constructed generic imported interface");
 			Assert.IsFalse (Marshal.IsTypeVisibleFromCom (typeof (VisibleClass[])), "array");
@@ -236,11 +246,13 @@ namespace MonoTests.System.Runtime.InteropServices {
 			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
 				Assert.Ignore ("COM registration is only supported on Windows.");
 
+			string testDirectory = Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location);
+			string assemblyName = "RegistrationServicesVersionedTestAssembly.dll";
+			Assembly first = Assembly.LoadFile (Path.Combine (testDirectory, "RegistrationVersion1", assemblyName));
+			Assembly second = Assembly.LoadFile (Path.Combine (testDirectory, "RegistrationVersion2", assemblyName));
 			RegistrationServices services = new RegistrationServices ();
-			Assembly first = CreateDynamicRegistrationAssembly ("RegistrationVersionOne", new Version (1, 0, 0, 0),
-				"MonoTests.RegistrationServices.VersionedObject", DynamicClassId, null);
-			Assembly second = CreateDynamicRegistrationAssembly ("RegistrationVersionTwo", new Version (2, 0, 0, 0),
-				"MonoTests.RegistrationServices.VersionedObject", DynamicClassId, null);
+			Assert.AreEqual (new Version (1, 0, 0, 0), first.GetName ().Version, "first assembly version");
+			Assert.AreEqual (new Version (2, 0, 0, 0), second.GetName ().Version, "second assembly version");
 
 			Assert.IsTrue (services.RegisterAssembly (first, AssemblyRegistrationFlags.None), "register first");
 			Assert.IsTrue (services.RegisterAssembly (second, AssemblyRegistrationFlags.None), "register second");
@@ -276,8 +288,7 @@ namespace MonoTests.System.Runtime.InteropServices {
 
 			const string typeName = "MonoTests.RegistrationServices.InvalidCallbackObject";
 			const string methodName = "InvalidRegister";
-			Assembly assembly = CreateDynamicRegistrationAssembly ("InvalidRegistrationCallbackAssembly",
-				new Version (1, 0, 0, 0), typeName, InvalidCallbackClassId, methodName);
+			Assembly assembly = LoadBoundaryTestAssembly ("RegistrationServicesInvalidCallbackTestAssembly.dll");
 			RegistrationServices services = new RegistrationServices ();
 
 			InvalidOperationException error = Assert.Throws<InvalidOperationException> (() =>
@@ -285,31 +296,35 @@ namespace MonoTests.System.Runtime.InteropServices {
 			StringAssert.Contains (assembly.FullName, error.Message, "assembly");
 			StringAssert.Contains (typeName, error.Message, "type");
 			StringAssert.Contains (methodName, error.Message, "method");
+			Assert.IsNull (Registry.ClassesRoot.OpenSubKey (InvalidCallbackProgId), "no partial ProgID");
 			Assert.IsNull (Registry.ClassesRoot.OpenSubKey ("CLSID\\" + InvalidCallbackClassId), "no partial CLSID");
 		}
 
-		static Assembly CreateDynamicRegistrationAssembly (string assemblyName, Version version, string typeName,
-			string classId, string invalidCallbackName)
+		[Test]
+		public void GenericCallbackFailsBeforeRegistryChanges ()
 		{
-			AssemblyName name = new AssemblyName (assemblyName);
-			name.Version = version;
-			AssemblyBuilder assembly = AppDomain.CurrentDomain.DefineDynamicAssembly (name, AssemblyBuilderAccess.Run);
-			ModuleBuilder module = assembly.DefineDynamicModule (assemblyName);
-			TypeBuilder type = module.DefineType (typeName, TypeAttributes.Public | TypeAttributes.Class);
-			type.DefineDefaultConstructor (MethodAttributes.Public);
-			type.SetCustomAttribute (new CustomAttributeBuilder (typeof (GuidAttribute).GetConstructor (
-				new Type[] { typeof (string) }), new object[] { classId.Trim ('{', '}') }));
-			if (invalidCallbackName != null) {
-				MethodBuilder callback = type.DefineMethod (invalidCallbackName,
-					MethodAttributes.Public | MethodAttributes.Static, typeof (int), new Type[] { typeof (Type) });
-				callback.SetCustomAttribute (new CustomAttributeBuilder (typeof (ComRegisterFunctionAttribute).GetConstructor (
-					Type.EmptyTypes), new object[0]));
-				ILGenerator generator = callback.GetILGenerator ();
-				generator.Emit (OpCodes.Ldc_I4_0);
-				generator.Emit (OpCodes.Ret);
-			}
-			type.CreateType ();
-			return assembly;
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				Assert.Ignore ("COM registration is only supported on Windows.");
+
+			const string typeName = "MonoTests.RegistrationServices.GenericCallbackObject";
+			const string methodName = "GenericRegister";
+			Assembly assembly = LoadBoundaryTestAssembly ("RegistrationServicesGenericCallbackTestAssembly.dll");
+			RegistrationServices services = new RegistrationServices ();
+
+			InvalidOperationException error = Assert.Throws<InvalidOperationException> (() =>
+				services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None));
+			StringAssert.Contains (assembly.FullName, error.Message, "assembly");
+			StringAssert.Contains (typeName, error.Message, "type");
+			StringAssert.Contains (methodName, error.Message, "method");
+			StringAssert.Contains ("generic parameters", error.Message, "requirement");
+			Assert.IsNull (Registry.ClassesRoot.OpenSubKey (GenericCallbackProgId), "no partial ProgID");
+			Assert.IsNull (Registry.ClassesRoot.OpenSubKey ("CLSID\\" + GenericCallbackClassId), "no partial CLSID");
+		}
+
+		static Assembly LoadBoundaryTestAssembly (string name)
+		{
+			return Assembly.LoadFrom (Path.Combine (
+				Path.GetDirectoryName (typeof (RegistrationServicesTest).Assembly.Location), name));
 		}
 
 		static void RemoveTestKeys ()
@@ -321,7 +336,10 @@ namespace MonoTests.System.Runtime.InteropServices {
 			Registry.ClassesRoot.DeleteSubKeyTree (CallbackPath, false);
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + DynamicClassId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree (DynamicProgId, false);
+			Registry.ClassesRoot.DeleteSubKeyTree (InvalidCallbackProgId, false);
 			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + InvalidCallbackClassId, false);
+			Registry.ClassesRoot.DeleteSubKeyTree (GenericCallbackProgId, false);
+			Registry.ClassesRoot.DeleteSubKeyTree ("CLSID\\" + GenericCallbackClassId, false);
 			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath, true)) {
 				if (categoryKey != null)
 					categoryKey.DeleteValue (ThirdPartyValue, false);
