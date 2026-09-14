@@ -244,6 +244,44 @@ namespace MonoTests.System.Runtime.InteropServices {
 		}
 
 		[Test]
+		public void RegisterCreatesMissingManagedCategoryDescription ()
+		{
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				Assert.Ignore ("COM registration is only supported on Windows.");
+
+			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath, true))
+				categoryKey.DeleteValue ("0");
+
+			Assembly assembly = LoadTestAssembly ();
+			RegistrationServices services = new RegistrationServices ();
+			Assert.IsTrue (services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None), "register");
+
+			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath)) {
+				Assert.AreEqual (ManagedCategoryDescription, categoryKey.GetValue ("0"), "created category description");
+				Assert.AreEqual ("preserve", categoryKey.GetValue (ThirdPartyValue), "existing category data");
+			}
+		}
+
+		[Test]
+		public void RegisterRepairsIncorrectManagedCategoryDescription ()
+		{
+			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+				Assert.Ignore ("COM registration is only supported on Windows.");
+
+			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath, true))
+				categoryKey.SetValue ("0", "Incorrect Category");
+
+			Assembly assembly = LoadTestAssembly ();
+			RegistrationServices services = new RegistrationServices ();
+			Assert.IsTrue (services.RegisterAssembly (assembly, AssemblyRegistrationFlags.None), "register");
+
+			using (RegistryKey categoryKey = Registry.ClassesRoot.OpenSubKey (ManagedCategoryPath)) {
+				Assert.AreEqual (ManagedCategoryDescription, categoryKey.GetValue ("0"), "repaired category description");
+				Assert.AreEqual ("preserve", categoryKey.GetValue (ThirdPartyValue), "existing category data");
+			}
+		}
+
+		[Test]
 		public void EmptyProgIdPreservesForeignClassProgId ()
 		{
 			if (Environment.OSVersion.Platform != PlatformID.Win32NT)
@@ -379,6 +417,11 @@ namespace MonoTests.System.Runtime.InteropServices {
 		{
 			return Assembly.LoadFrom (Path.Combine (
 				Path.GetDirectoryName (typeof (RegistrationServicesRegistryTest).Assembly.Location), name));
+		}
+
+		static Assembly LoadTestAssembly ()
+		{
+			return LoadBoundaryTestAssembly ("RegistrationServicesTestAssembly.dll");
 		}
 
 		static void RemoveTestKeys ()
