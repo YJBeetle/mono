@@ -2955,7 +2955,7 @@ interp_transform_call (TransformData *td, MonoMethod *method, MonoMethod *target
 				if (csignature->pinvoke && csignature->call_convention == MONO_CALL_DEFAULT &&
 				    method->wrapper_type == MONO_WRAPPER_MANAGED_TO_NATIVE) {
 					WrapperInfo *info = mono_marshal_get_wrapper_info (method);
-					if (info && info->subtype != WRAPPER_SUBTYPE_NATIVE_FUNC &&
+					if (info && info->subtype == WRAPPER_SUBTYPE_PINVOKE &&
 					    info->d.managed_to_native.method &&
 					    (info->d.managed_to_native.method->flags & METHOD_ATTRIBUTE_PINVOKE_IMPL)) {
 						/* The signature remains in data_items after the transform pool is freed. */
