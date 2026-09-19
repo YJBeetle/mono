@@ -2123,8 +2123,9 @@ do_icall (MonoMethodSignature *sig, int op, stackval *sp, gpointer ptr, gboolean
 {
 
 #if defined(HOST_WIN32) && defined(TARGET_X86)
-	/* Default signatures also describe internal C calls. */
-	if (sig && sig->pinvoke && sig->call_convention == MONO_CALL_STDCALL) {
+	/* Under Windows, the default P/Invoke calling convention is stdcall. */
+	if (sig && sig->pinvoke &&
+	    (sig->call_convention == MONO_CALL_STDCALL || sig->call_convention == MONO_CALL_DEFAULT)) {
 		do_icall_stdcall (op, sp, ptr);
 		goto done;
 	}
