@@ -48,12 +48,12 @@ compile RegistrationServicesInvalidCallbackTestAssembly.dll RegistrationServices
 compile RegistrationServicesGenericCallbackTestAssembly.dll RegistrationServicesBoundaryTestAssembly.cs -define:GENERIC_CALLBACK
 mcs -target:library -platform:anycpu "-out:$build/RegistrationServices.Tests.dll" "-r:$nunit" "$build/PR.RegistrationServicesTest.cs" "$build/PR.RegistrationServices.cs" "$build/PR.MarshalVisibility.cs"
 mcs "-out:$build/LinuxEnvironment.exe" "$repo/scripts/ci/registration-services-linux-probe.cs"
-mono --runtime=v4.0 "$build/LinuxEnvironment.exe" "$expected" "$MONO_REGISTRY_PATH" "$build/RegistrationServices.Tests.dll" | tee "$output/runtime-environment.log"
+mono --runtime=v4.0 "$build/LinuxEnvironment.exe" "$expected" "$MONO_REGISTRY_PATH" "$build/RegistrationServices.Tests.dll" | tee "$output-runtime-environment.log"
 
 result=0
 for fixture in RegistrationServicesTest RegistrationServicesRegistryTest; do
     set +e
-    timeout 180 mono --runtime=v4.0 "$runner" "$build/RegistrationServices.Tests.dll" "/run:MonoTests.System.Runtime.InteropServices.$fixture" /framework:mono-4.0 /process:Single /noshadow /labels /nothread /timeout:120000 /exclude:NotOnWindows,NotWorking,CAS,UI "/xml:$output/$fixture.xml" | tee "$output/$fixture.log"
+    timeout 180 mono --runtime=v4.0 "$runner" "$build/RegistrationServices.Tests.dll" "-run:MonoTests.System.Runtime.InteropServices.$fixture" -framework:mono-4.0 -process:Single -noshadow -labels -nothread -timeout:120000 -exclude:NotOnWindows,NotWorking,CAS,UI "-xml:$output/$fixture.xml" | tee "$output/$fixture.log"
     status=${PIPESTATUS[0]}
     set -e
     printf '%s\n' "$status" > "$output/$fixture.exit-code.txt"
