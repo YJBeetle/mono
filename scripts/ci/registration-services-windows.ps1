@@ -62,7 +62,9 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Runtime download failed (curl exit $LASTEXITCODE)" }
         if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $provenance.runtimeArchiveSha256) { throw 'Runtime archive hash mismatch' }
         Write-Host 'Runtime archive hash verified; extracting the bundle'
-        & tar -xf $archive -C $runtimeWork
+        $python = (Get-Command python.exe -ErrorAction Stop).Source
+        & $python --version
+        & $python (Join-Path $PSScriptRoot 'registration-services-windows-extract.py') $archive $runtimeWork
         if ($LASTEXITCODE -ne 0) { throw 'Runtime archive extraction failed' }
         Write-Host 'Runtime bundle extracted; installing the verified candidate corlib'
         $runtimeRoot = Join-Path $runtimeWork 'wine-mono-11.3.0'

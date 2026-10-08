@@ -43,6 +43,10 @@ it is not intended for the PR. A small Visual C++ host loads the existing x86/x6
 sets its library/config directories and calls the exported `mono_main`. It builds
 only this launcher, not Mono. The runtime archive and extracted bundle are temporary
 runner files and are not uploaded again as test artifacts.
+The archive SHA is verified before extraction. The runner's existing Python extracts
+the engine, 4.5 libraries, GAC, helper DLLs and config only, copying archive symlink
+targets as identical regular files to avoid Windows tar/symlink problems. Reference
+API profiles, build tools and unrelated framework support files are not needed.
 
 Only pushes to `codex/registration-services-windows-ci` in `YJBeetle/mono` run this
 workflow. It requests `contents: read`, has no secrets or submodules, and pins the
