@@ -29,7 +29,8 @@ jobs:
             /mcs/class/mono.snk
             /scripts/ci/registration-services-windows*
             /scripts/ci/registration-services-candidate/
-      - name: Compile and run focused native compatibility tests
+      - name: Compile and run focused Windows tests
+        timeout-minutes: 8
         shell: powershell
         run: ./scripts/ci/registration-services-windows.ps1 -Architecture '${{ matrix.architecture }}' -Runtime '${{ matrix.runtime }}'
       - name: Preserve evidence even on failure

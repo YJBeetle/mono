@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $output = Join-Path $repo "artifacts/registration-services-$Runtime-$Architecture"
 $build = Join-Path $output 'build'
@@ -56,10 +57,14 @@ try {
         $runtimeWork = Join-Path $env:RUNNER_TEMP "registration-services-mono-$Architecture"
         New-Item -ItemType Directory -Force $runtimeWork | Out-Null
         $archive = Join-Path $runtimeWork 'runtime.tar.xz'
-        Invoke-WebRequest -UseBasicParsing $provenance.runtimeArchiveUrl -OutFile $archive
+        Write-Host 'Downloading the pinned existing Mono runtime archive'
+        & curl.exe --fail --location --retry 2 --retry-max-time 180 --connect-timeout 30 --max-time 180 --output $archive $provenance.runtimeArchiveUrl
+        if ($LASTEXITCODE -ne 0) { throw "Runtime download failed (curl exit $LASTEXITCODE)" }
         if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $provenance.runtimeArchiveSha256) { throw 'Runtime archive hash mismatch' }
+        Write-Host 'Runtime archive hash verified; extracting the bundle'
         & tar -xf $archive -C $runtimeWork
         if ($LASTEXITCODE -ne 0) { throw 'Runtime archive extraction failed' }
+        Write-Host 'Runtime bundle extracted; installing the verified candidate corlib'
         $runtimeRoot = Join-Path $runtimeWork 'wine-mono-11.3.0'
         Copy-Item $candidate (Join-Path $runtimeRoot 'lib/mono/4.5/mscorlib.dll') -Force
         Get-FileHash (Join-Path $runtimeRoot 'bin/libmono-2.0-x86.dll'), (Join-Path $runtimeRoot 'bin/libmono-2.0-x86_64.dll'), (Join-Path $runtimeRoot 'lib/mono/4.5/mscorlib.dll') -Algorithm SHA256 |
@@ -72,6 +77,7 @@ try {
         $monoHost = Join-Path $build 'mono-host.exe'
         $hostSource = Join-Path $PSScriptRoot 'registration-services-windows-host.c'
         $compileHost = Join-Path $build 'compile-host.cmd'
+        Write-Host 'Building the small native Mono launcher'
         @"
 @echo off
 call "$vcvars" $vcArchitecture
@@ -135,7 +141,8 @@ class NativeEnvironment {
     if ($LASTEXITCODE -ne 0) { throw 'Environment probe compilation failed' }
     $bits = if ($Architecture -eq 'x86') { '32' } else { '64' }
     if ($Runtime -eq 'mono') {
-        & $monoHost $runtimeRoot $probe $bits mono $candidateHash 2>&1 | Tee-Object -FilePath (Join-Path $output 'runtime-environment.log')
+        Write-Host 'Running the candidate Mono identity, corlib hash and registry permission probe'
+        & $monoHost $runtimeRoot --runtime=v4.0 $probe $bits mono $candidateHash 2>&1 | Tee-Object -FilePath (Join-Path $output 'runtime-environment.log')
     } else {
         & $probe $bits 2>&1 | Tee-Object -FilePath (Join-Path $output 'runtime-environment.log')
     }
@@ -149,7 +156,7 @@ class NativeEnvironment {
         $testArgs = @((Join-Path $build 'RegistrationServices.Tests.dll'), "/run:MonoTests.System.Runtime.InteropServices.$fixture", '/noshadow', '/labels', '/nothread', "/exclude:$excludedCategories", "/xml:$xml")
         if ($Runtime -eq 'mono') {
             # Keep NUnit in the embedded Mono process; never delegate execution to native .NET.
-            & $monoHost $runtimeRoot $runner @testArgs /framework:mono-4.0 /process:Single 2>&1 | Tee-Object -FilePath (Join-Path $output "$fixture.log")
+            & $monoHost $runtimeRoot --runtime=v4.0 $runner @testArgs /framework:mono-4.0 /process:Single /timeout:120000 2>&1 | Tee-Object -FilePath (Join-Path $output "$fixture.log")
         } else {
             & $runner @testArgs /framework:net-4.0 2>&1 | Tee-Object -FilePath (Join-Path $output "$fixture.log")
         }
