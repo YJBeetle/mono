@@ -1,0 +1,68 @@
+name: RegistrationServices matching native Linux Mono
+
+on:
+  push:
+    branches: [codex/registration-services-windows-ci]
+    paths:
+      - .github/workflows/registration-services-linux-matching.yml
+      - scripts/ci/registration-services-linux-matching*
+      - mcs/class/corlib/Test/System.Runtime.InteropServices/RegistrationServices*.cs
+      - mcs/class/corlib/System.Runtime.InteropServices/RegistrationServices.cs
+      - mcs/class/corlib/System.Runtime.InteropServices/Marshal.cs
+
+permissions:
+  contents: read
+
+jobs:
+  matching-linux:
+    if: github.repository == 'YJBeetle/mono'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Install normal Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends autoconf automake libtool-bin gettext cmake build-essential python3 pkg-config mono-devel
+      - name: Compute runtime source and configuration identity
+        id: identity
+        run: ./scripts/ci/registration-services-linux-matching.sh identity
+      - name: Restore only a matching verified native build
+        id: cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/registration-services-matching-linux/prefix
+            ${{ runner.temp }}/registration-services-matching-linux/build-provenance.json
+            ${{ runner.temp }}/registration-services-matching-linux/product-sha256.txt
+            ${{ runner.temp }}/registration-services-matching-linux/*.log
+            ${{ runner.temp }}/registration-services-matching-linux/submodule-sources.txt
+          key: registration-services-ubuntu24-x64-${{ steps.identity.outputs.key }}
+      - name: Build or verify matching Linux runtime and corlib
+        timeout-minutes: 65
+        run: ./scripts/ci/registration-services-linux-matching.sh build
+      - name: Cache verified build before running integration tests
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/registration-services-matching-linux/prefix
+            ${{ runner.temp }}/registration-services-matching-linux/build-provenance.json
+            ${{ runner.temp }}/registration-services-matching-linux/product-sha256.txt
+            ${{ runner.temp }}/registration-services-matching-linux/*.log
+            ${{ runner.temp }}/registration-services-matching-linux/submodule-sources.txt
+          key: registration-services-ubuntu24-x64-${{ steps.identity.outputs.key }}
+      - name: Compile original tests and run the real matching corlib
+        timeout-minutes: 8
+        run: ./scripts/ci/registration-services-linux-matching.sh test
+      - name: Preserve build and integration evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: registration-services-matching-linux-${{ github.sha }}
+          path: artifacts/registration-services-matching-linux/
+          if-no-files-found: error
+          retention-days: 30

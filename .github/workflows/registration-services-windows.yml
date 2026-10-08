@@ -44,7 +44,7 @@ jobs:
           retention-days: 30
 
   linux:
-    if: github.repository == 'YJBeetle/mono'
+    if: github.repository == 'YJBeetle/mono' && !contains(github.event.head_commit.message, '[matching-linux]')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
