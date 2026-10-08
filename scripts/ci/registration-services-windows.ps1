@@ -175,7 +175,7 @@ class NativeEnvironment {
         $cases = @($results.SelectNodes('//test-case'))
         $summary = [pscustomobject]@{
             fixture = $fixture
-            totalDefined = if ($fixture -eq 'RegistrationServicesTest') { 2 } else { 10 }
+            totalDefined = if ($fixture -eq 'RegistrationServicesTest') { 2 } else { 12 }
             selected = $cases.Count
             filterExcluded = if ($Runtime -eq 'native' -and $fixture -eq 'RegistrationServicesRegistryTest') { 3 } else { 0 }
             passed = @($cases | Where-Object { $_.executed -eq 'True' -and $_.success -eq 'True' }).Count

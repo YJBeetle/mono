@@ -1,4 +1,4 @@
-name: RegistrationServices native Windows
+name: RegistrationServices cross-platform
 
 on:
   push:
@@ -39,5 +39,39 @@ jobs:
         with:
           name: registration-services-${{ matrix.runtime }}-${{ matrix.architecture }}-${{ github.sha }}
           path: artifacts/registration-services-${{ matrix.runtime }}-${{ matrix.architecture }}/
+          if-no-files-found: error
+          retention-days: 30
+
+  linux:
+    if: github.repository == 'YJBeetle/mono'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /mcs/class/corlib/Test/System.Runtime.InteropServices/RegistrationServices*.cs
+            /mcs/class/corlib/System.Runtime.InteropServices/RegistrationServices.cs
+            /mcs/class/corlib/System.Runtime.InteropServices/Marshal.cs
+            /mcs/class/corlib/Makefile
+            /mcs/class/mono.snk
+            /scripts/ci/registration-services-linux*
+            /scripts/ci/registration-services-candidate/
+      - name: Install native Linux Mono from Ubuntu packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mono-devel gcc pkg-config
+      - name: Compile and run focused native Linux tests
+        timeout-minutes: 8
+        run: ./scripts/ci/registration-services-linux.sh
+      - name: Preserve Linux evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: registration-services-linux-mono-${{ github.sha }}
+          path: artifacts/registration-services-linux-mono/
           if-no-files-found: error
           retention-days: 30

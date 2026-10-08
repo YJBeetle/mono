@@ -14,9 +14,9 @@ probe verifies the requested runtime, process bitness and write access to a temp
 The NUnit console runner and test assemblies target the requested architecture.
 Registry tests run serially. Native jobs exclude
 `NotOnWindows,NotWorking,CAS,UI,NotDotNet`; Mono jobs exclude only
-`NotOnWindows,NotWorking,CAS,UI`. There are 12 defined tests: two type tests and ten
-registry tests. Native jobs select nine and filter out three Mono-specific tests;
-Mono jobs select all twelve, including both new generic exception assertions and
+`NotOnWindows,NotWorking,CAS,UI`. There are 14 defined tests: two type tests and twelve
+registry tests. Native jobs select eleven and filter out three Mono-specific tests;
+Mono jobs select all fourteen, including both new generic exception assertions and
 all three Mono safeguards. Counts distinguish filtering from runtime skips.
 Unexpected test counts, ignored/skipped tests,
 zero-test results, missing XML, build failures and NUnit failures all fail the job.
@@ -51,3 +51,16 @@ API profiles, build tools and unrelated framework support files are not needed.
 Only pushes to `codex/registration-services-windows-ci` in `YJBeetle/mono` run this
 workflow. It requests `contents: read`, has no secrets or submodules, and pins the
 official checkout/upload actions by commit. It does not publish comments or PRs.
+
+The Linux job uses Ubuntu 24.04's native x64 Mono engine and existing Linux libraries,
+with the same pinned candidate corlib loaded via a small native embedding launcher.
+It is not Wine and it does not compile Mono. This pairing is intentionally verified
+at runtime rather than assumed compatible: the probe requires Unix, 64 bits, the
+candidate SHA, UnixRegistryApi and a machine registry store below RUNNER_TEMP.
+Engine package versions/hash and actual loaded corlib SHA are preserved. If that
+pairing cannot execute, the job fails without silently using the system corlib.
+The six fixtures are built with Ubuntu's mcs using the same defines/version paths/key.
+All fourteen tests are selected, with no NotDotNet exclusion. Machine registry data
+is isolated with MONO_REGISTRY_PATH; HOME is unchanged and tests only use HKCR.
+The original twelve checks remain, plus two tests for snapshot restoration of missing
+values, empty strings, raw ExpandString, DWord/QWord, binary and string-array values.
