@@ -25,6 +25,10 @@ class LinuxEnvironment {
         Console.WriteLine("MachineStore={0}; Personal={1}", store,
             Environment.GetFolderPath(Environment.SpecialFolder.Personal));
         if (store != args[1]) return 1;
+        Assembly tests = Assembly.LoadFrom(args[2]);
+        Type implementation = tests.GetType("System.Runtime.InteropServices.RegistrationServices", true);
+        Console.WriteLine("RegistrationServicesImplementationAssembly={0}; ValidationMode=PR source-level harness", implementation.Assembly.Location);
+        if (implementation.Assembly != tests || tests.GetType("System.Runtime.InteropServices.PrMarshal") == null) return 1;
         string path = "MonoTests.RegistrationServices.PermissionProbe." + Guid.NewGuid();
         using (RegistryKey key = Registry.ClassesRoot.CreateSubKey(path)) {
             key.SetValue("probe", "write");

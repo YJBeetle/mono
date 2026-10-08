@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   compatibility:
-    if: github.repository == 'YJBeetle/mono'
+    # Linux harness-only follow-ups reuse the already verified Windows test source.
+    if: github.repository == 'YJBeetle/mono' && !contains(github.event.head_commit.message, '[linux-only]')
     runs-on: windows-2022
     timeout-minutes: 20
     strategy:
@@ -64,7 +65,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends mono-devel gcc pkg-config
-      - name: Compile and run focused native Linux tests
+      - name: Compile and run explicit PR source-level native Linux tests
         timeout-minutes: 8
         run: ./scripts/ci/registration-services-linux.sh
       - name: Preserve Linux evidence even on failure

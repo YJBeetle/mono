@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Focused real-corlib validation on native Linux, never Wine.
+# Explicit source-level PR validation on native Linux, never Wine.
 set -euo pipefail
 repo=$(git rev-parse --show-toplevel)
 output="$repo/artifacts/registration-services-linux-mono"
@@ -16,23 +16,14 @@ cat /etc/os-release >> "$output/os-version.txt"
 mono --version | tee "$output/mono-version.txt"
 dpkg-query -W mono-runtime mono-runtime-sgen mono-devel > "$output/mono-packages.txt"
 sha256sum "$source"/RegistrationServices*.cs "$repo/mcs/class/corlib/Makefile" "$repo/mcs/class/mono.snk" > "$output/source-sha256.txt"
-cp "$candidate/provenance.json" "$output/"
-expected=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["corlibSha256"])' "$candidate/provenance.json")
-echo "$expected  $candidate/mscorlib.dll" | sha256sum -c -
-
-# Per-run machine registry and runtime files; leave HOME and the user registry untouched.
-runtime=$(mktemp -d "$RUNNER_TEMP/registration-services-linux-runtime.XXXXXX")
+printf '%s\n' 'SOURCE-LEVEL VALIDATION: PR RegistrationServices and visibility body, with Ubuntu native Mono corlib/registry APIs' | tee "$output/validation-mode.txt"
+# Per-run machine registry only; HOME and user registry remain unchanged.
 export MONO_REGISTRY_PATH
 MONO_REGISTRY_PATH=$(mktemp -d "$RUNNER_TEMP/registration-services-linux-registry.XXXXXX")
 printf '%s\n' "$MONO_REGISTRY_PATH" > "$output/registry-store.txt"
-mkdir -p "$runtime/lib/mono" "$runtime/etc"
-cp -a /usr/lib/mono/4.5 /usr/lib/mono/gac "$runtime/lib/mono/"
-cp -a /etc/mono "$runtime/etc/"
-cp --remove-destination "$candidate/mscorlib.dll" "$runtime/lib/mono/4.5/mscorlib.dll"
-gcc -Wall -Wextra "$repo/scripts/ci/registration-services-linux-host.c" -o "$build/mono-host" $(pkg-config --cflags --libs monosgen-2)
-ldd "$build/mono-host" | tee "$output/launcher-libraries.txt"
-engine=$(ldd "$build/mono-host" | awk '/libmonosgen-2.0.so/{print $3}')
-sha256sum "$(readlink -f "$engine")" "$runtime/lib/mono/4.5/mscorlib.dll" > "$output/loaded-runtime-hashes.txt"
+expected=$(sha256sum /usr/lib/mono/4.5/mscorlib.dll | cut -d ' ' -f 1)
+sha256sum /usr/bin/mono-sgen /usr/lib/mono/4.5/mscorlib.dll > "$output/loaded-runtime-hashes.txt"
+python3 "$repo/scripts/ci/registration-services-linux-source.py" "$repo" "$build"
 
 for id in NUnit NUnit.Runners; do
     lower=$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')
@@ -55,14 +46,14 @@ compile RegistrationVersion1/RegistrationServicesVersionedTestAssembly.dll Regis
 compile RegistrationVersion2/RegistrationServicesVersionedTestAssembly.dll RegistrationServicesBoundaryTestAssembly.cs -define:VERSION_TWO
 compile RegistrationServicesInvalidCallbackTestAssembly.dll RegistrationServicesBoundaryTestAssembly.cs -define:INVALID_CALLBACK
 compile RegistrationServicesGenericCallbackTestAssembly.dll RegistrationServicesBoundaryTestAssembly.cs -define:GENERIC_CALLBACK
-compile RegistrationServices.Tests.dll RegistrationServicesTest.cs "-r:$nunit"
+mcs -target:library -platform:anycpu "-out:$build/RegistrationServices.Tests.dll" "-r:$nunit" "$build/PR.RegistrationServicesTest.cs" "$build/PR.RegistrationServices.cs" "$build/PR.MarshalVisibility.cs"
 mcs "-out:$build/LinuxEnvironment.exe" "$repo/scripts/ci/registration-services-linux-probe.cs"
-"$build/mono-host" "$runtime" --runtime=v4.0 "$build/LinuxEnvironment.exe" "$expected" "$MONO_REGISTRY_PATH" | tee "$output/runtime-environment.log"
+mono --runtime=v4.0 "$build/LinuxEnvironment.exe" "$expected" "$MONO_REGISTRY_PATH" "$build/RegistrationServices.Tests.dll" | tee "$output/runtime-environment.log"
 
 result=0
 for fixture in RegistrationServicesTest RegistrationServicesRegistryTest; do
     set +e
-    timeout 180 "$build/mono-host" "$runtime" --runtime=v4.0 "$runner" "$build/RegistrationServices.Tests.dll" "/run:MonoTests.System.Runtime.InteropServices.$fixture" /framework:mono-4.0 /process:Single /noshadow /labels /nothread /timeout:120000 /exclude:NotOnWindows,NotWorking,CAS,UI "/xml:$output/$fixture.xml" | tee "$output/$fixture.log"
+    timeout 180 mono --runtime=v4.0 "$runner" "$build/RegistrationServices.Tests.dll" "/run:MonoTests.System.Runtime.InteropServices.$fixture" /framework:mono-4.0 /process:Single /noshadow /labels /nothread /timeout:120000 /exclude:NotOnWindows,NotWorking,CAS,UI "/xml:$output/$fixture.xml" | tee "$output/$fixture.log"
     status=${PIPESTATUS[0]}
     set -e
     printf '%s\n' "$status" > "$output/$fixture.exit-code.txt"
