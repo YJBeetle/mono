@@ -142,12 +142,16 @@ class NativeEnvironment {
     & $csc /nologo "/platform:$Architecture" "/out:$probe" $probeSource
     if ($LASTEXITCODE -ne 0) { throw 'Environment probe compilation failed' }
     $bits = if ($Architecture -eq 'x86') { '32' } else { '64' }
+    # Windows PowerShell wraps native stderr (including Mono's BOM) as errors.
+    # Capture it without aborting; the actual native exit code remains authoritative.
+    $ErrorActionPreference = 'Continue'
     if ($Runtime -eq 'mono') {
         Write-Host 'Running the candidate Mono identity, corlib hash and registry permission probe'
         & $monoHost $runtimeRoot --runtime=v4.0 $probe $bits mono $candidateHash 2>&1 | Tee-Object -FilePath (Join-Path $output 'runtime-environment.log')
     } else {
         & $probe $bits 2>&1 | Tee-Object -FilePath (Join-Path $output 'runtime-environment.log')
     }
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Native runtime, process architecture or registry permission probe failed' }
 
     $exitCode = 0
@@ -156,6 +160,7 @@ class NativeEnvironment {
     foreach ($fixture in @('RegistrationServicesTest', 'RegistrationServicesRegistryTest')) {
         $xml = Join-Path $output "$fixture.xml"
         $testArgs = @((Join-Path $build 'RegistrationServices.Tests.dll'), "/run:MonoTests.System.Runtime.InteropServices.$fixture", '/noshadow', '/labels', '/nothread', "/exclude:$excludedCategories", "/xml:$xml")
+        $ErrorActionPreference = 'Continue'
         if ($Runtime -eq 'mono') {
             # Keep NUnit in the embedded Mono process; never delegate execution to native .NET.
             & $monoHost $runtimeRoot --runtime=v4.0 $runner @testArgs /framework:mono-4.0 /process:Single /timeout:120000 2>&1 | Tee-Object -FilePath (Join-Path $output "$fixture.log")
@@ -163,6 +168,7 @@ class NativeEnvironment {
             & $runner @testArgs /framework:net-4.0 2>&1 | Tee-Object -FilePath (Join-Path $output "$fixture.log")
         }
         $runnerExit = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
         Set-Content (Join-Path $output "$fixture.exit-code.txt") $runnerExit
         if (!(Test-Path $xml)) { throw "Missing NUnit results for $fixture (exit $runnerExit)" }
         [xml]$results = Get-Content $xml
