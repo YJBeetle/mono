@@ -1,0 +1,14 @@
+{
+  "monoCommit": "56fe1db32314946a3be29b07771879260629b67f",
+  "buildRepository": "YJBeetle/wine-mono",
+  "buildCommit": "ea30a7e4541415493821f61ff8ae8ff4f819434d",
+  "buildRun": "https://github.com/YJBeetle/wine-mono/actions/runs/35711383323",
+  "artifactId": 10689060521,
+  "artifactName": "registration-services-candidate",
+  "artifactPath": "image/lib/mono/4.5/mscorlib.dll",
+  "corlibSha256": "bd69f79f162b738e4a524a4aef3ff62ca1a780c2b6b4496531c47e3c9ea8b245",
+  "workflow": "https://github.com/YJBeetle/wine-mono/blob/ea30a7e4541415493821f61ff8ae8ff4f819434d/.github/workflows/registration-services.yml",
+  "runtimeArchiveUrl": "https://github.com/wine-mono/wine-mono/releases/download/wine-mono-11.3.0/wine-mono-11.3.0-x86.tar.xz",
+  "runtimeArchiveSha256": "54a1b0111c3fe4b785eae688af94d27e64995707ad648b6fee8000381b80d298",
+  "note": "Existing candidate corlib paired with the same released engine/library bundle used by the pinned build workflow. Test-branch-only binary; no complete Mono build or cross-repository credentials required."
+}
