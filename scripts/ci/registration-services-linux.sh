@@ -48,7 +48,7 @@ compile RegistrationServicesInvalidCallbackTestAssembly.dll RegistrationServices
 compile RegistrationServicesGenericCallbackTestAssembly.dll RegistrationServicesBoundaryTestAssembly.cs -define:GENERIC_CALLBACK
 mcs -target:library -platform:anycpu "-out:$build/RegistrationServices.Tests.dll" "-r:$nunit" "$build/PR.RegistrationServicesTest.cs" "$build/PR.RegistrationServices.cs" "$build/PR.MarshalVisibility.cs"
 mcs "-out:$build/LinuxEnvironment.exe" "$repo/scripts/ci/registration-services-linux-probe.cs"
-mono --runtime=v4.0 "$build/LinuxEnvironment.exe" "$expected" "$MONO_REGISTRY_PATH" "$build/RegistrationServices.Tests.dll" | tee "$output-runtime-environment.log"
+mono --runtime=v4.0 "$build/LinuxEnvironment.exe" "$expected" "$MONO_REGISTRY_PATH" "$build/RegistrationServices.Tests.dll" | tee "$output/runtime-environment.log"
 
 result=0
 for fixture in RegistrationServicesTest RegistrationServicesRegistryTest; do
