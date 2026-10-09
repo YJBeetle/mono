@@ -129,6 +129,30 @@ class NativeEnvironment {
                 if (actual != args[2].ToLowerInvariant()) return 1;
             }
         }
+        if (args.Length > 3 && args[3] == "cleanup") {
+            string[] paths = {
+                "MonoTests.RegistrationServices.TestObject", "CLSID\\{5E4466A3-2BA4-414E-B70B-317D91BE57CC}",
+                "MonoTests.RegistrationServices.DerivedTestObject", "CLSID\\{641D963E-EA94-4E4F-B6EF-1DFEB43FB697}",
+                "CLSID\\{F0439499-B07C-4FA5-BC3B-8402B70B3AFF}", "MonoTests.RegistrationServices.CallbackState",
+                "MonoTests.RegistrationServices.VersionedObject", "CLSID\\{5C9782F8-3BAA-42C7-A461-B8C94F2FA438}",
+                "MonoTests.RegistrationServices.InvalidCallbackObject", "CLSID\\{F81E4AE1-917F-43C8-BD29-A56B182287AA}",
+                "MonoTests.RegistrationServices.GenericCallbackObject", "CLSID\\{86F43A7E-B430-4F56-9C6C-DD61BA460217}"
+            };
+            foreach (string path in paths) {
+                using (RegistryKey testKey = Registry.ClassesRoot.OpenSubKey(path)) {
+                    if (testKey != null) { Console.Error.WriteLine("Remaining test key: {0}", path); return 1; }
+                }
+            }
+            using (RegistryKey category = Registry.ClassesRoot.OpenSubKey("Component Categories\\{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}")) {
+                if (category != null && category.GetValue("MonoRegistrationServicesTest") != null) {
+                    Console.Error.WriteLine("Remaining fixture category value"); return 1;
+                }
+                Console.WriteLine("SharedCategoryExists={0}; SharedCategoryDescription={1}", category != null,
+                    category == null ? null : category.GetValue("0"));
+            }
+            Console.WriteLine("CleanupVerified=True; TestKeysAbsent={0}; FixtureCategoryValueAbsent=True", paths.Length);
+            return 0;
+        }
         string key = "MonoTests.RegistrationServices.PermissionProbe." + Guid.NewGuid();
         try {
             using (RegistryKey probe = Registry.ClassesRoot.CreateSubKey(key)) probe.SetValue("probe", "write");
@@ -175,7 +199,7 @@ class NativeEnvironment {
         $cases = @($results.SelectNodes('//test-case'))
         $summary = [pscustomobject]@{
             fixture = $fixture
-            totalDefined = if ($fixture -eq 'RegistrationServicesTest') { 2 } else { 12 }
+            totalDefined = if ($fixture -eq 'RegistrationServicesTest') { 2 } else { 10 }
             selected = $cases.Count
             filterExcluded = if ($Runtime -eq 'native' -and $fixture -eq 'RegistrationServicesRegistryTest') { 3 } else { 0 }
             passed = @($cases | Where-Object { $_.executed -eq 'True' -and $_.success -eq 'True' }).Count
@@ -191,6 +215,16 @@ class NativeEnvironment {
         }
     }
     $summaries | ConvertTo-Json | Set-Content (Join-Path $output 'summary.json')
+    $ErrorActionPreference = 'Continue'
+    if ($Runtime -eq 'mono') {
+        & $monoHost $runtimeRoot --runtime=v4.0 $probe $bits mono $candidateHash cleanup 2>&1 | Tee-Object -FilePath (Join-Path $output 'cleanup-verification.log')
+    } else {
+        & $probe $bits native unused cleanup 2>&1 | Tee-Object -FilePath (Join-Path $output 'cleanup-verification.log')
+    }
+    $cleanupExit = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    Set-Content (Join-Path $output 'cleanup.exit-code.txt') $cleanupExit
+    if ($cleanupExit -ne 0 -and $exitCode -eq 0) { $exitCode = $cleanupExit }
 } catch {
     Write-Output $_
     $exitCode = 1

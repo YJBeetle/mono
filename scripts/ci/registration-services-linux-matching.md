@@ -1,15 +1,15 @@
 # Matching native Linux Mono integration
 
 This branch-only workflow builds the Linux x64 SGen/JIT runtime and the standard
-net_4_x-linux corlib from the same repository checkout, then runs all fourteen
+net_4_x-linux corlib from the same repository checkout, then runs all twelve
 RegistrationServices tests on those actual products. It does not use Wine or the
 standalone source harness. The original repository test source is compiled alone
 with the installed matching compiler. The probe requires RegistrationServices to
 come from the same real corlib as System.Object and rejects a shadow implementation
 or PrMarshal helper in the fixture assembly. Loaded corlib hashes must match build
 products; RegisterAssembly must have a real method body. Process bitness, Unix
-backend, isolated machine store and absence of all thirteen fixture keys after
-execution are also checked. Filtering, skipping, missing XML or wrong counts fail.
+backend, isolated machine store and absence of all twelve private fixture keys and the category test marker after
+execution are also checked. The shared category is retained in its registration state. Filtering, skipping, missing XML or wrong counts fail.
 
 Normal autogen/configure/make/install run in an Ubuntu 24.04 disposable runner.
 Configure uses --with-mcs-docs=no --disable-system-aot --without-compiler-server

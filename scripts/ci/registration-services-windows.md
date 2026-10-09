@@ -14,9 +14,9 @@ probe verifies the requested runtime, process bitness and write access to a temp
 The NUnit console runner and test assemblies target the requested architecture.
 Registry tests run serially. Native jobs exclude
 `NotOnWindows,NotWorking,CAS,UI,NotDotNet`; Mono jobs exclude only
-`NotOnWindows,NotWorking,CAS,UI`. There are 14 defined tests: two type tests and twelve
-registry tests. Native jobs select eleven and filter out three Mono-specific tests;
-Mono jobs select all fourteen, including both new generic exception assertions and
+`NotOnWindows,NotWorking,CAS,UI`. There are 12 defined tests: two type tests and ten
+registry tests. Native jobs select nine and filter out three Mono-specific tests;
+Mono jobs select all twelve, including both new generic exception assertions and
 all three Mono safeguards. Counts distinguish filtering from runtime skips.
 Unexpected test counts, ignored/skipped tests,
 zero-test results, missing XML, build failures and NUnit failures all fail the job.
@@ -52,24 +52,13 @@ Only pushes to `codex/registration-services-windows-ci` in `YJBeetle/mono` run t
 workflow. It requests `contents: read`, has no secrets or submodules, and pins the
 official checkout/upload actions by commit. It does not publish comments or PRs.
 
-The Linux job is explicitly **source-level validation**, not candidate-corlib validation.
-Ubuntu 24.04's native x64 Mono engine cannot initialize the existing Windows-profile
-candidate corlib (missing runtime-critical Mono.RuntimeStructs/MonoError). That failed
-real-corlib attempt is preserved in run 37736098156; no tests executed in it.
-The Linux job therefore compiles the exact PR RegistrationServices source into the
-fixture DLL, removing only three internal MonoTODO annotations. It extracts the exact
-PR Marshal.IsTypeVisibleFromCom method body into a PrMarshal helper and routes the
-implementation/test visibility calls to it. Compiler shadowing warnings are expected.
-All other Marshal, registry and runtime APIs remain Ubuntu Mono's. Generated sources,
-transformation manifest and source/runtime hashes are uploaded for audit. This validates
-PR registration logic against the real Unix registry backend without rebuilding Mono;
-it cannot establish that a complete matching Linux corlib/runtime build passes.
-The probe requires Unix, 64 bits, the expected Ubuntu corlib SHA, UnixRegistryApi,
-fixture-owned PR implementation and a machine registry store below RUNNER_TEMP.
-The six fixtures use the same defines/version paths/key. All fourteen tests are selected,
-with no NotDotNet exclusion. HOME is unchanged; tests only use HKCR and isolate its
-store with MONO_REGISTRY_PATH. The original twelve checks remain, plus two tests for
-snapshot restoration of missing values, empty strings, raw ExpandString, DWord/QWord,
-binary and string-array values. Linux harness-only commits marked [linux-only] skip
-repeating the already completed Windows jobs; commits changing the repository tests
-must run the full matrix.
+Native Linux integration now uses the separate matching-source workflow described in
+`registration-services-linux-matching.md`. Commits marked [matching-linux] skip the
+historical source-level fallback job in this workflow. That fallback and its previous
+results are not substitutes for the matching runtime/corlib run.
+
+The reviewer-requested simplification removes both snapshot helper types and their
+two tests. Fixture setup seeds the shared category directly. Cleanup removes only
+its test marker and the fixture-owned ProgID/CLSID/callback keys, leaving the shared
+category in the state produced by registration. The post-test probe verifies those
+private keys and marker are absent without deleting shared category content.

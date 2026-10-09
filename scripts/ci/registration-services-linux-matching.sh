@@ -118,10 +118,11 @@ test)
     done
     "$prefix/bin/mono" "$build/MatchingLinuxEnvironment.exe" "$expected" "$MONO_REGISTRY_PATH" "$prefix" "$build/RegistrationServices.Tests.dll" cleanup | tee "$output/cleanup-verification.log"
     find "$MONO_REGISTRY_PATH" -type f -print | sort > "$output/remaining-registry-files.txt"
+    cp -a "$MONO_REGISTRY_PATH" "$output/registry-after"
     python3 - "$output" <<'PY'
 import json,pathlib,sys,xml.etree.ElementTree as ET
 root=pathlib.Path(sys.argv[1]); summaries=[]; success=True
-for fixture,total in [('RegistrationServicesTest',2),('RegistrationServicesRegistryTest',12)]:
+for fixture,total in [('RegistrationServicesTest',2),('RegistrationServicesRegistryTest',10)]:
     cases=list(ET.parse(root/(fixture+'.xml')).getroot().iter('test-case'))
     summary=dict(fixture=fixture,totalDefined=total,selected=len(cases),filterExcluded=0,
                  passed=sum(c.get('executed')=='True' and c.get('success')=='True' for c in cases),
