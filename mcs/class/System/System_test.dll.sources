@@ -306,6 +306,7 @@ System.Security.Cryptography.X509Certificates/X500DistinguishedNameTest.cs
 System.Security.Cryptography.X509Certificates/X509BasicConstraintsExtensionTest.cs
 System.Security.Cryptography.X509Certificates/X509Cert20Test.cs
 System.Security.Cryptography.X509Certificates/X509Certificate2Test.cs
+Mono.Btls/NativeCallingConventionTest.cs
 System.Security.Cryptography.X509Certificates/X509CertificateCollectionTest.cs
 System.Security.Cryptography.X509Certificates/X509Certificate2CollectionTest.cs
 System.Security.Cryptography.X509Certificates/X509ChainPolicyTest.cs
