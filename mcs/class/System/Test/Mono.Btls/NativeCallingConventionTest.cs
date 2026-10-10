@@ -33,8 +33,8 @@ namespace MonoTests.Mono.Btls {
 				Assert.AreEqual (CallingConvention.Cdecl, callback.CallingConvention, type.FullName);
 				callbacks++;
 			}
-			Assert.Greater (imports, 0, "No native BTLS imports inspected.");
-			Assert.Greater (callbacks, 0, "No native BTLS callbacks inspected.");
+			Assert.IsTrue (imports > 0, "No native BTLS imports inspected.");
+			Assert.IsTrue (callbacks > 0, "No native BTLS callbacks inspected.");
 		}
 	}
 }
