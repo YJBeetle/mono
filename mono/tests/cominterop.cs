@@ -739,6 +739,9 @@ public class Tests
 			if (CallableWrapperLeakTest () != 0)
 			    return 209;
 
+			if (CallableWrapperOverReleaseTest () != 0)
+				return 228;
+
 			if (mono_test_marshal_point_class_ccw_itest (test) != 0)
 				return 209;
 
@@ -2164,6 +2167,20 @@ public class Tests
 
 	// Doesn't matter what this is
 	internal class CallableWrapperLeakTestClass {
+	}
+
+	public static int CallableWrapperOverReleaseTest () {
+		var o = new CallableWrapperLeakTestClass ();
+		var pUnk = Marshal.GetIUnknownForObject (o);
+		int result = 0;
+		if (Marshal.AddRef (pUnk) != 2 || Marshal.Release (pUnk) != 1 || Marshal.Release (pUnk) != 0)
+			result = 1;
+		else if (Marshal.Release (pUnk) != -1 || Marshal.Release (pUnk) != -1)
+			result = 2;
+		else if (Marshal.AddRef (pUnk) != 1 || Marshal.Release (pUnk) != 0)
+			result = 3;
+		GC.KeepAlive (o);
+		return result;
 	}
 
 	public static int CallableWrapperLeakTest () {

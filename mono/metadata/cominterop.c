@@ -3389,8 +3389,15 @@ cominterop_ccw_release_impl (MonoCCWInterface* ccwe)
 	MONO_REQ_GC_UNSAFE_MODE;
 	MonoCCW* ccw = ccwe->ccw;
 	g_assert (ccw);
-	g_assert (ccw->ref_count > 0);
-	gint32 const ref_count = mono_atomic_dec_i32 ((gint32*)&ccw->ref_count);
+	gint32 old_count;
+	gint32 ref_count;
+	do {
+		old_count = mono_atomic_load_i32 ((gint32*)&ccw->ref_count);
+		/* Match .NET Framework without decrementing an already zero count. */
+		if (old_count == 0)
+			return -1;
+		ref_count = old_count - 1;
+	} while (mono_atomic_cas_i32 ((gint32*)&ccw->ref_count, ref_count, old_count) != old_count);
 	if (ref_count == 0) {
 		/* allow gc of object */
 		MonoGCHandle oldhandle = ccw->gc_handle;
