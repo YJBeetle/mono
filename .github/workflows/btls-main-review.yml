@@ -1,0 +1,80 @@
+name: BTLS main private review regression
+
+on:
+  push:
+    branches: [codex/btls-cdecl-main-ci]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BTLS_BASE: 04ac8131133a199d7f0ae4f3d9309321d8429589
+  BTLS_SOURCE: 943b7eca1e64302dbe141cd175093b63b5603b98
+
+jobs:
+  main-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x86
+            platform: linux/386
+            image: i386/debian:bookworm
+            pointer_size: 4
+          - architecture: x86_64
+            platform: linux/amd64
+            image: debian:bookworm
+            pointer_size: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+      - name: Verify the review branch contains only the selected source and private CI
+        run: |
+          set -euo pipefail
+          git cat-file -e "$BTLS_BASE^{commit}"
+          git cat-file -e "$BTLS_SOURCE^{commit}"
+          git diff --exit-code "$BTLS_SOURCE" HEAD -- . ':!.github/'
+          test "$(git rev-list --count "$BTLS_BASE..$BTLS_SOURCE")" = 2
+          mkdir -p evidence
+          git diff "$BTLS_BASE" "$BTLS_SOURCE" -- mcs/class/System/Mono.Btls > evidence/declarations.patch
+          git diff --name-only "$BTLS_BASE" "$BTLS_SOURCE" > evidence/source-files.txt
+          printf 'base=%s\nsource=%s\nci=%s\nplatform=%s\n' "$BTLS_BASE" "$BTLS_SOURCE" "$(git rev-parse HEAD)" '${{ matrix.platform }}' > evidence/source-manifest.txt
+      - name: Build the current-main baseline and fixed class library in an isolated container
+        env:
+          BTLS_CONTAINER: btls-${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          docker run -d --platform '${{ matrix.platform }}' --name "$BTLS_CONTAINER" \
+            -v "$PWD:/src" -w /src '${{ matrix.image }}' sleep infinity
+          docker exec -e DEBIAN_FRONTEND=noninteractive "$BTLS_CONTAINER" bash -c \
+            'apt-get update && apt-get install -y --no-install-recommends ca-certificates git build-essential autoconf automake libtool libtool-bin cmake gettext python3 pkg-config mono-devel openssl file unzip'
+          docker exec -e BTLS_BASE -e BTLS_SOURCE "$BTLS_CONTAINER" \
+            bash .github/scripts/btls-main-build.sh 2>&1 | tee evidence/build.log
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compile the exact unit fixture against the newly built main assemblies
+        run: bash .github/scripts/btls-main-compile.sh
+      - name: Run current-main native Linux JIT and interpreter controls
+        env:
+          BTLS_EXPECTED_POINTER_SIZE: ${{ matrix.pointer_size }}
+        run: |
+          set -euo pipefail
+          docker exec -e BTLS_EXPECTED_POINTER_SIZE 'btls-${{ matrix.architecture }}' \
+            bash .github/scripts/btls-main-runtime.sh 2>&1 | tee evidence/runtime.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btls-main-linux-${{ matrix.architecture }}
+          if-no-files-found: error
+          path: |
+            evidence/
+            config.log
+            config.h
+      - name: Remove this CI job's container
+        if: always()
+        run: docker rm -f 'btls-${{ matrix.architecture }}' || true
