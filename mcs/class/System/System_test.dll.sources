@@ -18,6 +18,7 @@ Microsoft.VisualBasic/CodeGeneratorFromNamespaceTest.cs
 Microsoft.VisualBasic/CodeGeneratorFromStatementTest.cs
 Microsoft.VisualBasic/CodeGeneratorFromTypeTest.cs
 Microsoft.Win32/IntranetZoneCredentialPolicyTest.cs
+Mono.Btls/NativeCallingConventionTest.cs
 System/FileStyleUriParserTest.cs
 System/FtpStyleUriParserTest.cs
 System/GenericUriParserTest.cs
